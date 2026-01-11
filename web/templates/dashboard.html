@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raspberry Pi Video Player</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎬 Video Player</h1>
+            <div class="header-info">
+                <span id="status-indicator" class="status-stopped">●</span>
+                <span id="status-text">Stopped</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Visual Layout -->
+            <div class="panel visual-panel">
+                <h2>Visual Layout</h2>
+                
+                <!-- Display Resolution -->
+                <div class="control-group">
+                    <label>Display Resolution:</label>
+                    <div class="resolution-controls">
+                        <input type="number" id="display-width" value="1920" min="640" max="7680" step="1">
+                        <span>×</span>
+                        <input type="number" id="display-height" value="1080" min="480" max="4320" step="1">
+                        <button id="update-resolution" class="btn btn-secondary">Update</button>
+                    </div>
+                </div>
+
+                <!-- Canvas -->
+                <canvas id="layout-canvas" width="960" height="540"></canvas>
+                <p class="canvas-help">Drag to move • Drag corners to resize</p>
+
+                <!-- Preset Buttons -->
+                <div class="preset-buttons" id="preset-buttons">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Right Panel: Controls -->
+            <div class="panel control-panel">
+                <!-- Video Source -->
+                <div class="section">
+                    <h3>Video Source</h3>
+                    
+                    <div class="control-group">
+                        <label>Source Type:</label>
+                        <div class="source-type-toggle">
+                            <button id="source-type-file" class="btn btn-toggle active">Local File</button>
+                            <button id="source-type-rtsp" class="btn btn-toggle">RTSP Stream</button>
+                        </div>
+                    </div>
+
+                    <div id="source-file-controls" class="source-controls">
+                        <select id="video-file" class="video-select">
+                            <option value="">Select a video...</option>
+                        </select>
+                    </div>
+
+                    <div id="source-rtsp-controls" class="source-controls" style="display:none;">
+                        <input type="text" id="rtsp-url" placeholder="rtsp://..." class="input-text">
+                    </div>
+
+                    <div class="playback-controls">
+                        <button id="play-btn" class="btn btn-primary">▶ Play</button>
+                        <button id="pause-btn" class="btn btn-secondary">⏸ Pause</button>
+                        <button id="stop-btn" class="btn btn-danger">⏹ Stop</button>
+                    </div>
+                </div>
+
+                <!-- Geometry Controls -->
+                <div class="section">
+                    <h3>Window Geometry</h3>
+                    
+                    <div class="geometry-grid">
+                        <div>
+                            <label>X:</label>
+                            <input type="number" id="geom-x" value="0" min="0" class="input-number">
+                        </div>
+                        <div>
+                            <label>Y:</label>
+                            <input type="number" id="geom-y" value="0" min="0" class="input-number">
+                        </div>
+                        <div>
+                            <label>Width:</label>
+                            <input type="number" id="geom-width" value="1920" min="100" class="input-number">
+                        </div>
+                        <div>
+                            <label>Height:</label>
+                            <input type="number" id="geom-height" value="1080" min="100" class="input-number">
+                        </div>
+                    </div>
+                    
+                    <button id="apply-geometry" class="btn btn-secondary full-width">Apply Geometry</button>
+                </div>
+
+                <!-- Volume & Loop -->
+                <div class="section">
+                    <h3>Playback Settings</h3>
+                    
+                    <div class="control-group">
+                        <label>Volume: <span id="volume-value">50</span>%</label>
+                        <input type="range" id="volume-slider" min="0" max="100" value="50" class="slider">
+                    </div>
+
+                    <div class="control-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="loop-checkbox" checked>
+                            Loop Playback
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Seek Controls -->
+                <div class="section" id="seek-section" style="display:none;">
+                    <h3>Position</h3>
+                    
+                    <div class="time-display">
+                        <span id="current-time">0:00</span>
+                        <span>/</span>
+                        <span id="duration-time">0:00</span>
+                    </div>
+                    
+                    <input type="range" id="seek-slider" min="0" max="100" value="0" class="slider">
+                    
+                    <div class="seek-buttons">
+                        <button id="seek-back" class="btn btn-secondary">⏪ -10s</button>
+                        <button id="seek-forward" class="btn btn-secondary">⏩ +10s</button>
+                    </div>
+                </div>
+
+                <!-- File Management -->
+                <div class="section">
+                    <h3>File Management</h3>
+                    
+                    <div class="file-upload">
+                        <input type="file" id="file-input" accept="video/*" style="display:none;">
+                        <button id="upload-btn" class="btn btn-primary full-width">📁 Upload Video</button>
+                        <div id="upload-progress" class="upload-progress" style="display:none;">
+                            <div id="upload-progress-bar" class="upload-progress-bar"></div>
+                            <span id="upload-progress-text">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="file-list" id="file-list">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Presets -->
+                <div class="section">
+                    <h3>Save Layout Preset</h3>
+                    
+                    <div class="preset-save">
+                        <input type="text" id="preset-name" placeholder="Preset name..." class="input-text">
+                        <input type="text" id="preset-description" placeholder="Description (optional)..." class="input-text">
+                        <button id="save-preset" class="btn btn-primary full-width">💾 Save Current Layout</button>
+                    </div>
+
+                    <div class="preset-list" id="preset-list">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/api-client.js"></script>
+    <script src="/static/js/canvas-controller.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
