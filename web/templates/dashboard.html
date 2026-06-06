@@ -168,6 +168,28 @@
                         <!-- Populated by JavaScript -->
                     </div>
                 </div>
+
+                <!-- Sync -->
+                <div class="section" id="sync-section">
+                    <h3>🔄 Multi-Player Sync</h3>
+                    <div class="control-group">
+                        <label>Sync Mode:</label>
+                        <div class="source-type-toggle">
+                            <button id="sync-mode-disabled" class="btn btn-toggle active" onclick="setSyncMode('disabled')">Off</button>
+                            <button id="sync-mode-master" class="btn btn-toggle" onclick="setSyncMode('master')">Master</button>
+                            <button id="sync-mode-remote" class="btn btn-toggle" onclick="setSyncMode('remote')">Remote</button>
+                        </div>
+                    </div>
+                    <div id="sync-master-ip-group" class="control-group" style="display:none;">
+                        <label>Master IP (optional):</label>
+                        <input type="text" id="sync-master-ip" placeholder="Leave blank for multicast" class="input-text">
+                        <p style="font-size:0.75rem;color:#888;margin:2px 0 0;">Leave blank to auto-discover master on local network</p>
+                    </div>
+                    <div id="sync-status-box" class="sync-status" style="display:none;">
+                        <span id="sync-status-label">—</span>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -178,3 +200,59 @@
     <script src="/static/js/dashboard.js"></script>
 </body>
 </html>
+
+<script>
+// ── Sync UI ──────────────────────────────────────────────────────────────────
+let currentSyncMode = 'disabled';
+
+async function loadSyncStatus() {
+    try {
+        const r = await fetch('/api/sync');
+        const d = await r.json();
+        applySyncStatus(d);
+    } catch(e) {}
+}
+
+function applySyncStatus(d) {
+    currentSyncMode = d.mode || 'disabled';
+    ['disabled','master','remote'].forEach(m => {
+        document.getElementById('sync-mode-' + m).classList.toggle('active', m === currentSyncMode);
+    });
+    const ipGroup = document.getElementById('sync-master-ip-group');
+    const statusBox = document.getElementById('sync-status-box');
+    ipGroup.style.display = currentSyncMode === 'remote' ? 'block' : 'none';
+    statusBox.style.display = currentSyncMode === 'disabled' ? 'none' : 'block';
+
+    if (d.mode === 'master') {
+        document.getElementById('sync-status-label').textContent =
+            d.running ? '📡 Broadcasting position' : '⚠ Not running';
+    } else if (d.mode === 'remote') {
+        const drift = d.drift !== null ? ` | drift ${d.drift > 0 ? '+' : ''}${d.drift}s` : '';
+        const corr  = ` | corrections: ${d.corrections || 0}`;
+        const last  = d.last_rx ? ` | last rx: ${new Date(d.last_rx*1000).toLocaleTimeString()}` : '';
+        document.getElementById('sync-status-label').textContent =
+            (d.running ? '📻 Listening' : '⚠ Not running') + drift + corr + last;
+    }
+}
+
+async function setSyncMode(mode) {
+    const masterIp = mode === 'remote'
+        ? (document.getElementById('sync-master-ip').value.trim() || null)
+        : null;
+    try {
+        const r = await fetch('/api/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode, master_ip: masterIp})
+        });
+        const d = await r.json();
+        applySyncStatus({...d, running: mode !== 'disabled', drift: null, corrections: 0});
+    } catch(e) {
+        alert('Sync configure failed: ' + e);
+    }
+}
+
+// Poll sync status every 2s when not disabled
+setInterval(() => { if (currentSyncMode !== 'disabled') loadSyncStatus(); }, 2000);
+loadSyncStatus();
+</script>
