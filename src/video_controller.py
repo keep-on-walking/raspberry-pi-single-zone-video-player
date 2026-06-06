@@ -12,11 +12,13 @@ import json
 
 from video_player import VideoPlayer
 from preset_manager import PresetManager
+from sync_service import SyncService
 
 
 # Configuration
 VIDEO_DIR = Path("/opt/rpi-video-player/data/videos")
 UPLOAD_DIR = VIDEO_DIR
+CONFIG_FILE = Path("/opt/rpi-video-player/config/sync.json")
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv', 'm4v'}
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 
@@ -30,7 +32,27 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 player = VideoPlayer(video_dir=str(VIDEO_DIR))
 presets = PresetManager()
 
+# Load sync config and start sync service
+def _load_sync_config():
+    if CONFIG_FILE.exists():
+        try:
+            return json.load(open(CONFIG_FILE))
+        except Exception:
+            pass
+    return {'mode': 'disabled', 'master_ip': None}
+
+def _save_sync_config(cfg):
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(cfg, f, indent=2)
+
+_sync_cfg = _load_sync_config()
+sync = SyncService(player, mode=_sync_cfg.get('mode', 'disabled'),
+                   master_ip=_sync_cfg.get('master_ip'))
+sync.start()
+
 print(f"📂 Upload folder: {UPLOAD_DIR}")
+print(f"🔄 Sync mode: {_sync_cfg.get('mode', 'disabled')}")
 
 
 def allowed_file(filename):
@@ -381,6 +403,40 @@ def api_delete_file(filename):
         
         filepath.unlink()
         return jsonify({"status": "deleted", "filename": filename})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+# =============================================================================
+# Sync API
+# =============================================================================
+
+@app.route('/api/sync', methods=['GET'])
+def api_sync_status():
+    """Get current sync configuration and status"""
+    return jsonify(sync.status)
+
+
+@app.route('/api/sync', methods=['POST'])
+def api_sync_configure():
+    """
+    Configure sync mode.
+    Body: {"mode": "master"|"remote"|"disabled", "master_ip": "192.168.x.x"}
+    master_ip only required when mode=remote. If omitted, listens on multicast.
+    """
+    try:
+        data = request.get_json()
+        mode = data.get('mode', 'disabled')
+        master_ip = data.get('master_ip', None)
+
+        if mode not in ('master', 'remote', 'disabled'):
+            return jsonify({"error": "mode must be master, remote, or disabled"}), 400
+
+        sync.set_mode(mode, master_ip)
+        _save_sync_config({'mode': mode, 'master_ip': master_ip})
+
+        return jsonify({"status": "ok", "mode": mode, "master_ip": master_ip})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
