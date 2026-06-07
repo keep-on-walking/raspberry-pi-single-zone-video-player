@@ -8,33 +8,28 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <header class="header">
-            <h1>🎬 Video Player</h1>
+            <h1>Video Player</h1>
             <div class="header-info">
                 <span id="status-indicator" class="status-stopped">●</span>
                 <span id="status-text">Stopped</span>
             </div>
         </header>
 
-        <!-- Main Content -->
         <div class="main-content">
-            <!-- Left Panel: Visual Layout -->
             <div class="panel visual-panel">
                 <h2>Visual Layout</h2>
 
-                <!-- Display Resolution -->
                 <div class="control-group">
                     <label>Display Resolution:</label>
                     <div class="resolution-controls">
                         <input type="number" id="display-width" value="1920" min="640" max="7680" step="1">
-                        <span>×</span>
+                        <span>x</span>
                         <input type="number" id="display-height" value="1080" min="480" max="4320" step="1">
                         <button id="update-resolution" class="btn btn-secondary">Update</button>
                     </div>
                 </div>
 
-                <!-- Display Mode Toggle -->
                 <div class="control-group">
                     <label>Display Mode:</label>
                     <div class="source-type-toggle">
@@ -44,22 +39,16 @@
                     <span id="mode-status" style="font-size:0.75rem;color:#888;margin-left:8px;"></span>
                 </div>
 
-                <!-- Canvas -->
                 <canvas id="layout-canvas" width="960" height="540"></canvas>
-                <p class="canvas-help">Drag to move • Drag corners to resize</p>
+                <p class="canvas-help">Drag to move - Drag corners to resize</p>
 
-                <!-- Preset Buttons -->
-                <div class="preset-buttons" id="preset-buttons">
-                    <!-- Populated by JavaScript -->
-                </div>
+                <div class="preset-buttons" id="preset-buttons"></div>
             </div>
 
-            <!-- Right Panel: Controls -->
             <div class="panel control-panel">
-                <!-- Video Source -->
+
                 <div class="section">
                     <h3>Video Source</h3>
-
                     <div class="control-group">
                         <label>Source Type:</label>
                         <div class="source-type-toggle">
@@ -67,59 +56,38 @@
                             <button id="source-type-rtsp" class="btn btn-toggle">RTSP Stream</button>
                         </div>
                     </div>
-
                     <div id="source-file-controls" class="source-controls">
                         <select id="video-file" class="video-select">
                             <option value="">Select a video...</option>
                         </select>
                     </div>
-
                     <div id="source-rtsp-controls" class="source-controls" style="display:none;">
                         <input type="text" id="rtsp-url" placeholder="rtsp://..." class="input-text">
                     </div>
-
                     <div class="playback-controls">
-                        <button id="play-btn" class="btn btn-primary">▶ Play</button>
-                        <button id="pause-btn" class="btn btn-secondary">⏸ Pause</button>
-                        <button id="stop-btn" class="btn btn-danger">⏹ Stop</button>
+                        <button id="play-btn" class="btn btn-primary">Play</button>
+                        <button id="pause-btn" class="btn btn-secondary">Pause</button>
+                        <button id="stop-btn" class="btn btn-danger">Stop</button>
                     </div>
                 </div>
 
-                <!-- Geometry Controls -->
                 <div class="section">
                     <h3>Window Geometry</h3>
-
                     <div class="geometry-grid">
-                        <div>
-                            <label>X:</label>
-                            <input type="number" id="geom-x" value="0" min="0" class="input-number">
-                        </div>
-                        <div>
-                            <label>Y:</label>
-                            <input type="number" id="geom-y" value="0" min="0" class="input-number">
-                        </div>
-                        <div>
-                            <label>Width:</label>
-                            <input type="number" id="geom-width" value="1920" min="100" class="input-number">
-                        </div>
-                        <div>
-                            <label>Height:</label>
-                            <input type="number" id="geom-height" value="1080" min="100" class="input-number">
-                        </div>
+                        <div><label>X:</label><input type="number" id="geom-x" value="0" min="0" class="input-number"></div>
+                        <div><label>Y:</label><input type="number" id="geom-y" value="0" min="0" class="input-number"></div>
+                        <div><label>Width:</label><input type="number" id="geom-width" value="1920" min="100" class="input-number"></div>
+                        <div><label>Height:</label><input type="number" id="geom-height" value="1080" min="100" class="input-number"></div>
                     </div>
-
                     <button id="apply-geometry" class="btn btn-secondary full-width">Apply Geometry</button>
                 </div>
 
-                <!-- Volume & Loop -->
                 <div class="section">
                     <h3>Playback Settings</h3>
-
                     <div class="control-group">
                         <label>Volume: <span id="volume-value">50</span>%</label>
                         <input type="range" id="volume-slider" min="0" max="100" value="50" class="slider">
                     </div>
-
                     <div class="control-group">
                         <label class="checkbox-label">
                             <input type="checkbox" id="loop-checkbox" checked>
@@ -128,60 +96,45 @@
                     </div>
                 </div>
 
-                <!-- Seek Controls -->
                 <div class="section" id="seek-section" style="display:none;">
                     <h3>Position</h3>
-
                     <div class="time-display">
                         <span id="current-time">0:00</span>
                         <span>/</span>
                         <span id="duration-time">0:00</span>
                     </div>
-
                     <input type="range" id="seek-slider" min="0" max="100" value="0" class="slider">
-
                     <div class="seek-buttons">
-                        <button id="seek-back" class="btn btn-secondary">⏪ -10s</button>
-                        <button id="seek-forward" class="btn btn-secondary">⏩ +10s</button>
+                        <button id="seek-back" class="btn btn-secondary">-10s</button>
+                        <button id="seek-forward" class="btn btn-secondary">+10s</button>
                     </div>
                 </div>
 
-                <!-- File Management -->
                 <div class="section">
                     <h3>File Management</h3>
-
                     <div class="file-upload">
                         <input type="file" id="file-input" accept="video/*" style="display:none;">
-                        <button id="upload-btn" class="btn btn-primary full-width">📁 Upload Video</button>
+                        <button id="upload-btn" class="btn btn-primary full-width">Upload Video</button>
                         <div id="upload-progress" class="upload-progress" style="display:none;">
                             <div id="upload-progress-bar" class="upload-progress-bar"></div>
                             <span id="upload-progress-text">0%</span>
                         </div>
                     </div>
-
-                    <div class="file-list" id="file-list">
-                        <!-- Populated by JavaScript -->
-                    </div>
+                    <div class="file-list" id="file-list"></div>
                 </div>
 
-                <!-- Presets -->
                 <div class="section">
                     <h3>Save Layout Preset</h3>
-
                     <div class="preset-save">
                         <input type="text" id="preset-name" placeholder="Preset name..." class="input-text">
                         <input type="text" id="preset-description" placeholder="Description (optional)..." class="input-text">
-                        <button id="save-preset" class="btn btn-primary full-width">💾 Save Current Layout</button>
+                        <button id="save-preset" class="btn btn-primary full-width">Save Current Layout</button>
                     </div>
-
-                    <div class="preset-list" id="preset-list">
-                        <!-- Populated by JavaScript -->
-                    </div>
+                    <div class="preset-list" id="preset-list"></div>
                 </div>
 
-                <!-- Sync -->
                 <div class="section" id="sync-section">
-                    <h3>🔄 Multi-Player Sync</h3>
+                    <h3>Multi-Player Sync</h3>
                     <div class="control-group">
                         <label>Sync Mode:</label>
                         <div class="source-type-toggle">
@@ -196,7 +149,18 @@
                         <p style="font-size:0.75rem;color:#888;margin:2px 0 0;">Leave blank to auto-discover master on local network</p>
                     </div>
                     <div id="sync-status-box" class="sync-status" style="display:none;">
-                        <span id="sync-status-label">—</span>
+                        <span id="sync-status-label">-</span>
+                    </div>
+
+                    <div id="remotes-section" style="display:none;margin-top:12px;">
+                        <label style="font-weight:600;">Remote Players:</label>
+                        <div id="remotes-list" style="margin:8px 0;"></div>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                            <input type="text" id="remote-ip" placeholder="IP address" class="input-text" style="flex:2;min-width:120px;">
+                            <input type="number" id="remote-port" placeholder="Port" value="5000" class="input-number" style="flex:1;min-width:70px;">
+                            <input type="text" id="remote-name" placeholder="Name" class="input-text" style="flex:2;min-width:100px;">
+                            <button class="btn btn-primary" onclick="addRemote()">Add</button>
+                        </div>
                     </div>
                 </div>
 
@@ -204,13 +168,11 @@
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="/static/js/api-client.js"></script>
     <script src="/static/js/canvas-controller.js"></script>
     <script src="/static/js/dashboard.js"></script>
 
 <script>
-// ── Display Mode Switching ───────────────────────────────────────────────────
 async function setDisplayMode(mode) {
     const statusEl = document.getElementById('mode-status');
     statusEl.textContent = 'Switching...';
@@ -221,28 +183,18 @@ async function setDisplayMode(mode) {
             body: JSON.stringify({mode})
         });
         const d = await r.json();
-        if (d.error) {
-            statusEl.textContent = '⚠ ' + d.error;
-            return;
-        }
-        // Update toggle buttons
+        if (d.error) { statusEl.textContent = 'Error: ' + d.error; return; }
         document.getElementById('mode-1080p').classList.toggle('active', mode === '1080p');
         document.getElementById('mode-4k').classList.toggle('active', mode === '4k');
-        // Update resolution inputs and canvas
         const w = mode === '4k' ? 3840 : 1920;
         const h = mode === '4k' ? 2160 : 1080;
         document.getElementById('display-width').value = w;
         document.getElementById('display-height').value = h;
         document.getElementById('geom-width').value = w;
         document.getElementById('geom-height').value = h;
-        statusEl.textContent = '✓ ' + d.resolution;
-        // Trigger canvas resize if available
-        if (canvas) {
-            canvas.setDisplayResolution(w, h);
-        }
-    } catch(e) {
-        statusEl.textContent = '⚠ Failed';
-    }
+        statusEl.textContent = d.resolution || '';
+        if (canvas) canvas.setDisplayResolution(w, h);
+    } catch(e) { statusEl.textContent = 'Failed'; }
 }
 
 async function loadDisplayMode() {
@@ -256,7 +208,6 @@ async function loadDisplayMode() {
     } catch(e) {}
 }
 
-// ── Sync UI ──────────────────────────────────────────────────────────────────
 let currentSyncMode = 'disabled';
 
 async function loadSyncStatus() {
@@ -272,26 +223,22 @@ function applySyncStatus(d) {
     ['disabled','master','remote'].forEach(m => {
         document.getElementById('sync-mode-' + m).classList.toggle('active', m === currentSyncMode);
     });
-    const ipGroup = document.getElementById('sync-master-ip-group');
-    const statusBox = document.getElementById('sync-status-box');
-    ipGroup.style.display = currentSyncMode === 'remote' ? 'block' : 'none';
-    statusBox.style.display = currentSyncMode === 'disabled' ? 'none' : 'block';
+    document.getElementById('sync-master-ip-group').style.display = currentSyncMode === 'remote' ? 'block' : 'none';
+    document.getElementById('sync-status-box').style.display = currentSyncMode === 'disabled' ? 'none' : 'block';
+    document.getElementById('remotes-section').style.display = currentSyncMode === 'master' ? 'block' : 'none';
     if (d.mode === 'master') {
-        document.getElementById('sync-status-label').textContent =
-            d.running ? '📡 Broadcasting position' : '⚠ Not running';
+        document.getElementById('sync-status-label').textContent = d.running ? 'Broadcasting position' : 'Not running';
+        loadRemotes();
     } else if (d.mode === 'remote') {
-        const drift = d.drift !== null ? ` | drift ${d.drift > 0 ? '+' : ''}${d.drift}s` : '';
-        const corr = ` | corrections: ${d.corrections || 0}`;
-        const last = d.last_rx ? ` | last rx: ${new Date(d.last_rx*1000).toLocaleTimeString()}` : '';
-        document.getElementById('sync-status-label').textContent =
-            (d.running ? '📻 Listening' : '⚠ Not running') + drift + corr + last;
+        const drift = d.drift !== null ? ' | drift ' + (d.drift > 0 ? '+' : '') + d.drift + 's' : '';
+        const corr = ' | corrections: ' + (d.corrections || 0);
+        const last = d.last_rx ? ' | last rx: ' + new Date(d.last_rx*1000).toLocaleTimeString() : '';
+        document.getElementById('sync-status-label').textContent = (d.running ? 'Listening' : 'Not running') + drift + corr + last;
     }
 }
 
 async function setSyncMode(mode) {
-    const masterIp = mode === 'remote'
-        ? (document.getElementById('sync-master-ip').value.trim() || null)
-        : null;
+    const masterIp = mode === 'remote' ? (document.getElementById('sync-master-ip').value.trim() || null) : null;
     try {
         const r = await fetch('/api/sync', {
             method: 'POST',
@@ -300,15 +247,77 @@ async function setSyncMode(mode) {
         });
         const d = await r.json();
         applySyncStatus({...d, running: mode !== 'disabled', drift: null, corrections: 0});
+    } catch(e) { alert('Sync configure failed: ' + e); }
+}
+
+async function loadRemotes() {
+    try {
+        const r = await fetch('/api/remotes');
+        const remotes = await r.json();
+        renderRemotes(remotes);
+    } catch(e) {}
+}
+
+function renderRemotes(remotes) {
+    const list = document.getElementById('remotes-list');
+    if (remotes.length === 0) {
+        list.innerHTML = '<p style="color:#888;font-size:0.8rem;">No remote players configured.</p>';
+        return;
+    }
+    list.innerHTML = remotes.map(function(r) {
+        var ip = r.ip;
+        var port = r.port || 5000;
+        var name = r.name || r.ip;
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#1a1a2e;border-radius:6px;">'
+            + '<span id="ping-' + ip + '" style="font-size:0.75rem;color:#888;">●</span>'
+            + '<span style="flex:1;font-size:0.85rem;">' + name + ' <span style="color:#888;">' + ip + ':' + port + '</span></span>'
+            + '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.75rem;" onclick="pingRemote(&quot;' + ip + '&quot;)">Ping</button>'
+            + '<button class="btn btn-danger" style="padding:2px 8px;font-size:0.75rem;" onclick="removeRemote(&quot;' + ip + '&quot;)">X</button>'
+            + '</div>';
+    }).join('');
+    remotes.forEach(r => pingRemote(r.ip));
+}
+
+async function addRemote() {
+    const ip = document.getElementById('remote-ip').value.trim();
+    const port = parseInt(document.getElementById('remote-port').value) || 5000;
+    const name = document.getElementById('remote-name').value.trim() || ip;
+    if (!ip) { alert('Please enter an IP address'); return; }
+    try {
+        const r = await fetch('/api/remotes', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip, port, name})
+        });
+        const d = await r.json();
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('remote-ip').value = '';
+        document.getElementById('remote-name').value = '';
+        loadRemotes();
+    } catch(e) { alert('Failed to add remote: ' + e); }
+}
+
+async function removeRemote(ip) {
+    try {
+        await fetch('/api/remotes/' + ip, {method: 'DELETE'});
+        loadRemotes();
+    } catch(e) {}
+}
+
+async function pingRemote(ip) {
+    const el = document.getElementById('ping-' + ip);
+    if (!el) return;
+    try {
+        const r = await fetch('/api/remotes/' + ip + '/ping');
+        const d = await r.json();
+        el.style.color = d.status === 'online' ? '#22c55e' : '#ef4444';
+        el.title = d.status;
     } catch(e) {
-        alert('Sync configure failed: ' + e);
+        if (el) el.style.color = '#ef4444';
     }
 }
 
-// Poll sync status every 2s when active
 setInterval(() => { if (currentSyncMode !== 'disabled') loadSyncStatus(); }, 2000);
-
-// Init on load
 loadDisplayMode();
 loadSyncStatus();
 </script>
