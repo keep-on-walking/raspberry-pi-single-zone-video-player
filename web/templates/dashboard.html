@@ -22,7 +22,7 @@
             <!-- Left Panel: Visual Layout -->
             <div class="panel visual-panel">
                 <h2>Visual Layout</h2>
-                
+
                 <!-- Display Resolution -->
                 <div class="control-group">
                     <label>Display Resolution:</label>
@@ -32,6 +32,16 @@
                         <input type="number" id="display-height" value="1080" min="480" max="4320" step="1">
                         <button id="update-resolution" class="btn btn-secondary">Update</button>
                     </div>
+                </div>
+
+                <!-- Display Mode Toggle -->
+                <div class="control-group">
+                    <label>Display Mode:</label>
+                    <div class="source-type-toggle">
+                        <button id="mode-1080p" class="btn btn-toggle active" onclick="setDisplayMode('1080p')">1080p</button>
+                        <button id="mode-4k" class="btn btn-toggle" onclick="setDisplayMode('4k')">4K</button>
+                    </div>
+                    <span id="mode-status" style="font-size:0.75rem;color:#888;margin-left:8px;"></span>
                 </div>
 
                 <!-- Canvas -->
@@ -49,7 +59,7 @@
                 <!-- Video Source -->
                 <div class="section">
                     <h3>Video Source</h3>
-                    
+
                     <div class="control-group">
                         <label>Source Type:</label>
                         <div class="source-type-toggle">
@@ -78,7 +88,7 @@
                 <!-- Geometry Controls -->
                 <div class="section">
                     <h3>Window Geometry</h3>
-                    
+
                     <div class="geometry-grid">
                         <div>
                             <label>X:</label>
@@ -97,14 +107,14 @@
                             <input type="number" id="geom-height" value="1080" min="100" class="input-number">
                         </div>
                     </div>
-                    
+
                     <button id="apply-geometry" class="btn btn-secondary full-width">Apply Geometry</button>
                 </div>
 
                 <!-- Volume & Loop -->
                 <div class="section">
                     <h3>Playback Settings</h3>
-                    
+
                     <div class="control-group">
                         <label>Volume: <span id="volume-value">50</span>%</label>
                         <input type="range" id="volume-slider" min="0" max="100" value="50" class="slider">
@@ -121,15 +131,15 @@
                 <!-- Seek Controls -->
                 <div class="section" id="seek-section" style="display:none;">
                     <h3>Position</h3>
-                    
+
                     <div class="time-display">
                         <span id="current-time">0:00</span>
                         <span>/</span>
                         <span id="duration-time">0:00</span>
                     </div>
-                    
+
                     <input type="range" id="seek-slider" min="0" max="100" value="0" class="slider">
-                    
+
                     <div class="seek-buttons">
                         <button id="seek-back" class="btn btn-secondary">⏪ -10s</button>
                         <button id="seek-forward" class="btn btn-secondary">⏩ +10s</button>
@@ -139,7 +149,7 @@
                 <!-- File Management -->
                 <div class="section">
                     <h3>File Management</h3>
-                    
+
                     <div class="file-upload">
                         <input type="file" id="file-input" accept="video/*" style="display:none;">
                         <button id="upload-btn" class="btn btn-primary full-width">📁 Upload Video</button>
@@ -157,7 +167,7 @@
                 <!-- Presets -->
                 <div class="section">
                     <h3>Save Layout Preset</h3>
-                    
+
                     <div class="preset-save">
                         <input type="text" id="preset-name" placeholder="Preset name..." class="input-text">
                         <input type="text" id="preset-description" placeholder="Description (optional)..." class="input-text">
@@ -198,10 +208,54 @@
     <script src="/static/js/api-client.js"></script>
     <script src="/static/js/canvas-controller.js"></script>
     <script src="/static/js/dashboard.js"></script>
-</body>
-</html>
 
 <script>
+// ── Display Mode Switching ───────────────────────────────────────────────────
+async function setDisplayMode(mode) {
+    const statusEl = document.getElementById('mode-status');
+    statusEl.textContent = 'Switching...';
+    try {
+        const r = await fetch('/api/display/mode', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode})
+        });
+        const d = await r.json();
+        if (d.error) {
+            statusEl.textContent = '⚠ ' + d.error;
+            return;
+        }
+        // Update toggle buttons
+        document.getElementById('mode-1080p').classList.toggle('active', mode === '1080p');
+        document.getElementById('mode-4k').classList.toggle('active', mode === '4k');
+        // Update resolution inputs and canvas
+        const w = mode === '4k' ? 3840 : 1920;
+        const h = mode === '4k' ? 2160 : 1080;
+        document.getElementById('display-width').value = w;
+        document.getElementById('display-height').value = h;
+        document.getElementById('geom-width').value = w;
+        document.getElementById('geom-height').value = h;
+        statusEl.textContent = '✓ ' + d.resolution;
+        // Trigger canvas resize if available
+        if (canvas) {
+            canvas.setDisplayResolution(w, h);
+        }
+    } catch(e) {
+        statusEl.textContent = '⚠ Failed';
+    }
+}
+
+async function loadDisplayMode() {
+    try {
+        const r = await fetch('/api/display/mode');
+        const d = await r.json();
+        const mode = d.mode || '1080p';
+        document.getElementById('mode-1080p').classList.toggle('active', mode === '1080p');
+        document.getElementById('mode-4k').classList.toggle('active', mode === '4k');
+        document.getElementById('mode-status').textContent = d.resolution || '';
+    } catch(e) {}
+}
+
 // ── Sync UI ──────────────────────────────────────────────────────────────────
 let currentSyncMode = 'disabled';
 
@@ -222,14 +276,13 @@ function applySyncStatus(d) {
     const statusBox = document.getElementById('sync-status-box');
     ipGroup.style.display = currentSyncMode === 'remote' ? 'block' : 'none';
     statusBox.style.display = currentSyncMode === 'disabled' ? 'none' : 'block';
-
     if (d.mode === 'master') {
         document.getElementById('sync-status-label').textContent =
             d.running ? '📡 Broadcasting position' : '⚠ Not running';
     } else if (d.mode === 'remote') {
         const drift = d.drift !== null ? ` | drift ${d.drift > 0 ? '+' : ''}${d.drift}s` : '';
-        const corr  = ` | corrections: ${d.corrections || 0}`;
-        const last  = d.last_rx ? ` | last rx: ${new Date(d.last_rx*1000).toLocaleTimeString()}` : '';
+        const corr = ` | corrections: ${d.corrections || 0}`;
+        const last = d.last_rx ? ` | last rx: ${new Date(d.last_rx*1000).toLocaleTimeString()}` : '';
         document.getElementById('sync-status-label').textContent =
             (d.running ? '📻 Listening' : '⚠ Not running') + drift + corr + last;
     }
@@ -252,7 +305,13 @@ async function setSyncMode(mode) {
     }
 }
 
-// Poll sync status every 2s when not disabled
+// Poll sync status every 2s when active
 setInterval(() => { if (currentSyncMode !== 'disabled') loadSyncStatus(); }, 2000);
+
+// Init on load
+loadDisplayMode();
 loadSyncStatus();
 </script>
+
+</body>
+</html>
