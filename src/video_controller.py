@@ -29,15 +29,20 @@ app = Flask(__name__,
             static_folder='../web/static')
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
+# Sync config is loaded before the player so remote mute (DESIGN.md §3
+# decision 2) can be baked into the persistent mpv launch command.
+# role="off" (the default) is a no-op: no sockets opened, mute=False,
+# player behaviour unchanged from Phase 1.
+sync_config = SyncConfig()
+remote_mute = (sync_config.data["role"] == "remote"
+               and not sync_config.data.get("remote_audio", False))
+
 # Initialize player and preset manager
-player = VideoPlayer(video_dir=str(VIDEO_DIR))
+player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute)
 presets = PresetManager()
 
 print(f"📂 Upload folder: {UPLOAD_DIR}")
 
-# Initialize sync (DESIGN.md §3, §12 phase 2). role="off" (the default) is
-# a no-op: no sockets are opened and player behaviour is unchanged.
-sync_config = SyncConfig()
 sync_master = None
 sync_remote = None
 
@@ -52,6 +57,18 @@ elif sync_config.data["role"] == "remote":
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def sync_locked(data):
+    """DESIGN.md §3 decision 3: playback endpoints are locked on a
+    sync remote (the chase loop owns mpv there) unless the request
+    carries the maintenance-only override flag."""
+    return bool(sync_remote) and not (data or {}).get('override')
+
+
+def sync_locked_response():
+    return jsonify({"error": "playback is sync-controlled on a remote device",
+                     "hint": "pass override:true for maintenance testing"}), 409
 
 
 # =============================================================================
@@ -79,11 +96,14 @@ def api_play():
     """Play a video"""
     try:
         data = request.get_json()
-        
+
+        if sync_locked(data):
+            return sync_locked_response()
+
         source = data.get('source')
         if not source:
             return jsonify({"error": "No source provided"}), 400
-        
+
         loop = data.get('loop', True)
         volume = data.get('volume', 50)
         
@@ -114,6 +134,10 @@ def api_play():
 def api_stop():
     """Stop playback"""
     try:
+        data = request.get_json(silent=True)
+        if sync_locked(data):
+            return sync_locked_response()
+
         player.stop()
         return jsonify({"status": "stopped"})
     except Exception as e:
@@ -124,6 +148,10 @@ def api_stop():
 def api_pause():
     """Pause/unpause playback"""
     try:
+        data = request.get_json(silent=True)
+        if sync_locked(data):
+            return sync_locked_response()
+
         player.pause()
         return jsonify({"status": player.state["status"]})
     except Exception as e:
@@ -135,8 +163,12 @@ def api_seek():
     """Seek to position"""
     try:
         data = request.get_json()
+
+        if sync_locked(data):
+            return sync_locked_response()
+
         position = data.get('position')
-        
+
         if position is None:
             return jsonify({"error": "No position provided"}), 400
         
@@ -151,8 +183,12 @@ def api_seek_relative():
     """Seek relative to current position"""
     try:
         data = request.get_json()
+
+        if sync_locked(data):
+            return sync_locked_response()
+
         seconds = data.get('seconds', 0)
-        
+
         player.seek_relative(float(seconds))
         return jsonify({"status": "ok"})
     except Exception as e:

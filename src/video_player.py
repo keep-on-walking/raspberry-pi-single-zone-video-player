@@ -28,10 +28,15 @@ from pathlib import Path
 class VideoPlayer:
     """Manages a single persistent MPV instance"""
 
-    def __init__(self, video_dir="/opt/rpi-video-player/data/videos"):
+    def __init__(self, video_dir="/opt/rpi-video-player/data/videos", mute=False):
         self.video_dir = Path(video_dir)
         self.socket_path = "/tmp/mpvsocket-player"
         self.process = None
+
+        # Remotes launch muted (DESIGN.md §3 decision 2) — a launch
+        # argument, so it's baked into _build_command() rather than
+        # toggled at runtime.
+        self.mute = mute
 
         # Playback state (semantics unchanged from v1.0)
         self.state = {
@@ -127,6 +132,9 @@ class VideoPlayer:
             '--network-timeout=10',
             '--rtsp-transport=tcp',
         ]
+
+        if self.mute:
+            cmd.append('--no-audio')
 
         return cmd
 
@@ -361,15 +369,24 @@ class VideoPlayer:
             self.state["status"] = "playing"
             print("Playback resumed")
 
-    def seek(self, position):
-        """Seek to a specific position (in seconds)"""
-        self._send_command({"command": ["seek", position, "absolute"]})
+    def seek(self, position, exact=False):
+        """Seek to a specific position (in seconds). exact=True trades
+        speed for frame accuracy (used by the sync chase loop's hard-seek
+        correction, DESIGN.md §7)."""
+        mode = "absolute+exact" if exact else "absolute"
+        self._send_command({"command": ["seek", position, mode]})
         print(f"Seeked to {position}s")
 
     def seek_relative(self, seconds):
         """Seek relative to current position"""
         self._send_command({"command": ["seek", seconds, "relative"]})
         print(f"Seeked {'+' if seconds > 0 else ''}{seconds}s")
+
+    def set_speed(self, speed):
+        """Set playback speed (1.0 = normal). Used by the sync chase loop
+        to nudge a remote into alignment without a perceptible jump
+        (DESIGN.md §7) — not part of the persisted player state."""
+        self._send_command({"command": ["set_property", "speed", speed]})
 
     def set_volume(self, volume):
         """Set volume (0-100)"""
