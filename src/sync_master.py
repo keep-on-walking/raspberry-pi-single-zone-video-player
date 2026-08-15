@@ -204,11 +204,16 @@ class SyncMaster:
             remotes = {}
             for device_id, hb in self.remotes.items():
                 age = now - hb["last_seen"]
+                err_ms = hb.get("err_ms")
+                fps = hb.get("fps")
+                err_frames = (err_ms * fps / 1000.0) if (err_ms is not None and fps) else None
                 remotes[device_id] = {
                     "state": hb.get("state"),
                     "file": hb.get("file"),
                     "pos": hb.get("pos"),
-                    "err_ms": hb.get("err_ms"),
+                    "err_ms": err_ms,
+                    "err_frames": round(err_frames, 2) if err_frames is not None else None,
+                    "fps": fps,
                     "chrony_ms": hb.get("chrony_ms"),
                     "warnings": hb.get("warnings", []),
                     "last_seen_ago_s": round(age, 1),

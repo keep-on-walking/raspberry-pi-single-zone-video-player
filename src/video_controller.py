@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from pathlib import Path
 import os
 import json
+import socket
 
 from video_player import VideoPlayer
 from preset_manager import PresetManager
@@ -283,7 +284,7 @@ def api_sync_status():
             return jsonify(sync_master.get_status())
         if sync_remote:
             return jsonify(sync_remote.get_status())
-        return jsonify({"role": "off"})
+        return jsonify({"role": "off", "hostname": socket.gethostname()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

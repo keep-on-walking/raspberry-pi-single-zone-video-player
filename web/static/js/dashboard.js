@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeUI();
     loadInitialData();
     startStatusPolling();
+    startSyncPolling();
 });
 
 async function initializeUI() {
@@ -521,6 +522,112 @@ async function updateStatus() {
     } catch (error) {
         console.error('Status update failed:', error);
     }
+}
+
+// Sync status polling (DESIGN.md §9 GET /api/sync/status). Runs on its
+// own slower interval — sync state changes far less often than playback
+// position, and this keeps the dashboard cheap to poll.
+let syncInterval;
+const SYNC_GOOD_MS = 50; // matches the DESIGN.md T4 acceptance target
+
+function startSyncPolling() {
+    syncInterval = setInterval(updateSyncStatus, 10000);
+    updateSyncStatus(); // Initial update
+}
+
+async function updateSyncStatus() {
+    try {
+        const sync = await apiClient.getSyncStatus();
+
+        if (sync.hostname) {
+            document.getElementById('device-name').textContent = `🎬 ${sync.hostname}`;
+        }
+
+        const panel = document.getElementById('sync-panel');
+        if (!sync.role || sync.role === 'off') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = 'flex';
+
+        const badge = document.getElementById('sync-role-badge');
+        badge.textContent = sync.role.toUpperCase();
+        badge.className = `sync-role-badge sync-role-${sync.role}`;
+
+        if (sync.role === 'master') {
+            renderMasterSync(sync);
+        } else if (sync.role === 'remote') {
+            renderRemoteSync(sync);
+        }
+    } catch (error) {
+        console.error('Sync status update failed:', error);
+    }
+}
+
+function renderMasterSync(sync) {
+    const indicator = document.getElementById('sync-indicator');
+    const summary = document.getElementById('sync-summary');
+    const remotes = Object.entries(sync.remotes || {});
+
+    if (remotes.length === 0) {
+        indicator.className = 'sync-indicator sync-neutral';
+        summary.textContent = 'No remotes connected';
+        return;
+    }
+
+    const anyBad = remotes.some(([, r]) => isRemoteOutOfSync(r));
+    indicator.className = `sync-indicator ${anyBad ? 'sync-bad' : 'sync-good'}`;
+
+    summary.textContent = remotes.map(([id, r]) => formatRemoteStat(id, r)).join('   •   ');
+}
+
+function isRemoteOutOfSync(r) {
+    if (r.offline) return true;
+    if (r.warnings && r.warnings.length) return true;
+    if (r.err_ms != null && Math.abs(r.err_ms) > SYNC_GOOD_MS) return true;
+    return false;
+}
+
+function formatRemoteStat(id, r) {
+    if (r.offline) return `${id}: offline`;
+
+    const parts = [];
+    if (r.err_ms != null) {
+        parts.push(`${r.err_ms >= 0 ? '+' : ''}${r.err_ms.toFixed(0)}ms`);
+        if (r.err_frames != null) parts.push(`${r.err_frames.toFixed(1)}f`);
+    } else {
+        parts.push('—');
+    }
+    if (r.warnings && r.warnings.length) parts.push(`⚠ ${r.warnings.join(', ')}`);
+
+    return `${id}: ${parts.join(' / ')}`;
+}
+
+function renderRemoteSync(sync) {
+    const indicator = document.getElementById('sync-indicator');
+    const summary = document.getElementById('sync-summary');
+    const chase = sync.chase || {};
+
+    if (!sync.master_seen) {
+        indicator.className = 'sync-indicator sync-bad';
+        summary.textContent = 'Master not seen';
+        return;
+    }
+
+    const hasWarnings = chase.warnings && chase.warnings.length;
+    const withinTarget = chase.err_ms == null || Math.abs(chase.err_ms) <= SYNC_GOOD_MS;
+    indicator.className = `sync-indicator ${(!hasWarnings && withinTarget) ? 'sync-good' : 'sync-bad'}`;
+
+    const parts = [];
+    if (chase.err_ms != null) {
+        parts.push(`${chase.err_ms >= 0 ? '+' : ''}${chase.err_ms.toFixed(0)}ms vs master`);
+        if (chase.err_frames != null) parts.push(`${chase.err_frames.toFixed(1)} frames`);
+    } else {
+        parts.push('not converging yet');
+    }
+    if (hasWarnings) parts.push(`⚠ ${chase.warnings.join(', ')}`);
+
+    summary.textContent = parts.join('   •   ');
 }
 
 // Utility functions

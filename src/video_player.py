@@ -405,6 +405,17 @@ class VideoPlayer:
             pass
         return 0
 
+    def get_fps(self):
+        """Get the loaded file's container-declared frame rate, or 0 if
+        unavailable. Used to express sync error in frames, not just ms."""
+        try:
+            response = self._send_command({"command": ["get_property", "container-fps"]})
+            if response and "data" in response and response["data"] is not None:
+                return response["data"]
+        except Exception:
+            pass
+        return 0
+
     def get_duration(self):
         """Get video duration"""
         try:

@@ -39,6 +39,10 @@ class APIClient {
     async getStatus() {
         return this.get('/api/status');
     }
+
+    async getSyncStatus() {
+        return this.get('/api/sync/status');
+    }
     
     // Display resolution
     async setDisplayResolution(width, height) {

@@ -10,12 +10,19 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>🎬 Video Player</h1>
+            <h1 id="device-name">🎬 Video Player</h1>
             <div class="header-info">
                 <span id="status-indicator" class="status-stopped">●</span>
                 <span id="status-text">Stopped</span>
             </div>
         </header>
+
+        <!-- Sync status: hidden entirely when sync.role is "off" -->
+        <div id="sync-panel" class="sync-panel" style="display: none;">
+            <span id="sync-role-badge" class="sync-role-badge"></span>
+            <span id="sync-indicator" class="sync-indicator">●</span>
+            <span id="sync-summary" class="sync-summary"></span>
+        </div>
 
         <!-- Main Content -->
         <div class="main-content">

@@ -69,6 +69,43 @@ body {
     50% { opacity: 0.5; }
 }
 
+/* Sync status */
+.sync-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: var(--bg-panel);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+.sync-role-badge {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+}
+
+.sync-role-master { color: var(--primary); background: rgba(59, 130, 246, 0.15); }
+.sync-role-remote { color: var(--warning); background: rgba(245, 158, 11, 0.15); }
+
+.sync-indicator {
+    font-size: 14px;
+}
+
+.sync-good { color: var(--success); }
+.sync-bad { color: var(--danger); }
+.sync-neutral { color: var(--text-muted); }
+
+.sync-summary {
+    color: var(--text-muted);
+}
+
 /* Main Layout */
 .main-content {
     display: grid;

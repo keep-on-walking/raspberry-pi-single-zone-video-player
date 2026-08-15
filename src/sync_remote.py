@@ -287,6 +287,7 @@ class SyncRemote:
     def _send_heartbeat(self, master_addr):
         offset_ms, _leap = get_chrony_offset_ms()
         status = self.player.get_status() if self.player else {}
+        fps = self.player.get_fps() if self.player else 0
         hb = {
             "v": 1,
             "id": self.hostname,
@@ -294,6 +295,7 @@ class SyncRemote:
             "file": Path(status["source"]).name if status.get("source") else None,
             "pos": status.get("position", 0),
             "err_ms": self.err_ms,
+            "fps": fps or None,
             "chrony_ms": offset_ms,
             "warnings": list(self.warnings),
         }
@@ -314,6 +316,9 @@ class SyncRemote:
             seq_gaps = self.seq_gaps
 
         offset_ms, leap_status = get_chrony_offset_ms()
+        fps = (self.player.get_fps() if self.player else 0) or None
+        err_frames = (self.err_ms * fps / 1000.0) if (self.err_ms is not None and fps) else None
+
         return {
             "role": "remote",
             "hostname": self.hostname,
@@ -332,6 +337,8 @@ class SyncRemote:
                 "applied_state": self._applied_state,
                 "applied_file": self._applied_file,
                 "err_ms": self.err_ms,
+                "err_frames": round(err_frames, 2) if err_frames is not None else None,
+                "fps": fps,
                 "speed": self._last_speed,
                 "warnings": list(self.warnings),
             },
