@@ -160,6 +160,7 @@ Environment=DISPLAY=:1
 ExecStart=/usr/bin/X :1 vt7
 ExecStartPost=/bin/sleep 3
 ExecStartPost=/bin/sh -c 'DISPLAY=:1 xrandr --output HDMI-1 --mode 1920x1080 2>/dev/null || true'
+ExecStartPost=/bin/sh -c 'DISPLAY=:1 xset s off; DISPLAY=:1 xset s noblank; DISPLAY=:1 xset -dpms'
 Restart=always
 RestartSec=3
 
