@@ -27,8 +27,12 @@ echo "  * Raspberry Pi OS Lite (64-bit) - headless recommended"
 echo "  * Internet connection"
 echo ""
 # Prompt via /dev/tty so this works when piped (curl | sudo bash);
-# auto-continue when no terminal is available (unattended installs)
-if [ -r /dev/tty ]; then
+# auto-continue when no terminal is available (unattended installs).
+# When the self-bootstrap re-launches this script, the question was
+# already answered once - don't ask twice (RPI_INSTALL_CONFIRMED).
+if [ -n "$RPI_INSTALL_CONFIRMED" ]; then
+    echo "(already confirmed - continuing)"
+elif [ -r /dev/tty ]; then
     read -p "Continue with installation? (y/N) " -n 1 -r < /dev/tty || REPLY=y
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -65,6 +69,7 @@ if [ ! -d "$SCRIPT_DIR/src" ]; then
     BOOTSTRAP_DIR=$(mktemp -d /tmp/rpi-player-install.XXXXXX)
     git clone --branch "$INSTALL_BRANCH" --depth 1 "$REPO_URL" "$BOOTSTRAP_DIR/repo"
     echo "Re-launching installer from the cloned repo..."
+    export RPI_INSTALL_CONFIRMED=1
     exec bash "$BOOTSTRAP_DIR/repo/install.sh" "$INSTALL_BRANCH"
 fi
 
@@ -212,7 +217,7 @@ After=multi-user.target
 Type=simple
 User=$ACTUAL_USER
 Environment=DISPLAY=:1
-ExecStart=/usr/bin/X :1 vt7
+ExecStart=/usr/bin/X :1 vt7 -noreset
 ExecStartPost=/bin/sleep 3
 ExecStartPost=/bin/sh -c 'DISPLAY=:1 xrandr --output HDMI-1 --mode 1920x1080 2>/dev/null || true'
 ExecStartPost=/bin/sh -c 'DISPLAY=:1 xset s off; DISPLAY=:1 xset s noblank; DISPLAY=:1 xset -dpms'
