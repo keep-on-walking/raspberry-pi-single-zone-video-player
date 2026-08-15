@@ -26,17 +26,46 @@ echo "  * Raspberry Pi 5 (or Pi 4)"
 echo "  * Raspberry Pi OS Lite (64-bit) - headless recommended"
 echo "  * Internet connection"
 echo ""
-read -p "Continue with installation? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Installation cancelled."
-    exit 1
+# Prompt via /dev/tty so this works when piped (curl | sudo bash);
+# auto-continue when no terminal is available (unattended installs)
+if [ -r /dev/tty ]; then
+    read -p "Continue with installation? (y/N) " -n 1 -r < /dev/tty || REPLY=y
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled."
+        exit 1
+    fi
+else
+    echo "No terminal detected - continuing unattended."
 fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root: sudo bash install.sh"
     exit 1
+fi
+
+# =============================================================================
+# Self-bootstrap: if the application files aren't alongside this script
+# (e.g. it was piped from curl), install git, clone the repo at the right
+# branch, and re-run from the clone. Branch defaults to the branch this
+# copy of the installer ships on; override with:  ... | sudo bash -s -- <branch>
+# =============================================================================
+
+INSTALL_BRANCH="${1:-multisync}"
+REPO_URL="https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player.git"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd || pwd)"
+if [ ! -d "$SCRIPT_DIR/src" ]; then
+    echo ""
+    echo "Application files not found next to installer - bootstrapping from GitHub"
+    echo "  Branch: $INSTALL_BRANCH"
+    apt update
+    apt install -y git
+    BOOTSTRAP_DIR=$(mktemp -d /tmp/rpi-player-install.XXXXXX)
+    git clone --branch "$INSTALL_BRANCH" --depth 1 "$REPO_URL" "$BOOTSTRAP_DIR/repo"
+    echo "Re-launching installer from the cloned repo..."
+    exec bash "$BOOTSTRAP_DIR/repo/install.sh" "$INSTALL_BRANCH"
 fi
 
 # Get the actual user (not root)
@@ -122,14 +151,40 @@ echo "Configuring X11..."
 # Create X11 config for Pi 5 GPU
 mkdir -p /etc/X11/xorg.conf.d
 
-cat > /etc/X11/xorg.conf.d/20-modesetting.conf << 'EOF'
+# Detect which DRI card drives the display: the vc4/display device is the
+# one exposing HDMI connectors (the v3d render node exposes none). This
+# varies between Pi models (and occasionally between boots on the Pi 4).
+KMS_CARD=""
+for c in /sys/class/drm/card*; do
+    [ -e "$c" ] || continue
+    n=$(basename "$c")
+    case "$n" in *-*) continue ;; esac
+    if ls /sys/class/drm/ | grep -q "^${n}-HDMI"; then
+        KMS_CARD="/dev/dri/$n"
+        break
+    fi
+done
+
+if [ -n "$KMS_CARD" ]; then
+    echo "Display DRI device detected: $KMS_CARD"
+    cat > /etc/X11/xorg.conf.d/20-modesetting.conf << EOF
 Section "Device"
     Identifier "Card1"
     Driver "modesetting"
-    Option "kmsdev" "/dev/dri/card1"
+    Option "kmsdev" "$KMS_CARD"
     Option "ShadowFB" "false"
 EndSection
 EOF
+else
+    echo "Could not detect display DRI device - letting X11 autodetect"
+    cat > /etc/X11/xorg.conf.d/20-modesetting.conf << 'EOF'
+Section "Device"
+    Identifier "Card1"
+    Driver "modesetting"
+    Option "ShadowFB" "false"
+EndSection
+EOF
+fi
 
 # Configure X11 wrapper to allow any user to start X server
 echo "Configuring X11 permissions..."
@@ -168,6 +223,14 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
+# On low-RAM devices (1GB Pi 4), trim the player's demuxer cache
+TOTAL_MB=$(free -m | awk '/^Mem:/{print $2}')
+CACHE_ENV=""
+if [ "$TOTAL_MB" -le 1200 ]; then
+    echo "Low-memory device detected (${TOTAL_MB}MB) - setting 20MB demuxer cache"
+    CACHE_ENV="Environment=RPI_PLAYER_CACHE_MB=20"
+fi
+
 # Video Player Service
 cat > /etc/systemd/system/video-player.service << EOF
 [Unit]
@@ -179,6 +242,7 @@ Requires=x11-server.service
 Type=simple
 User=$ACTUAL_USER
 Environment=DISPLAY=:1
+$CACHE_ENV
 WorkingDirectory=$INSTALL_DIR/src
 ExecStart=$INSTALL_DIR/venv/bin/python3 $INSTALL_DIR/src/video_controller.py
 Restart=always
@@ -252,11 +316,13 @@ echo ""
 echo "======================================================================="
 echo ""
 
-read -p "Reboot now? (y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Rebooting..."
-    reboot
+if [ -r /dev/tty ]; then
+    read -p "Reboot now? (y/N) " -n 1 -r < /dev/tty || REPLY=n
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Rebooting..."
+        reboot
+    fi
 fi
 
 echo ""
