@@ -542,3 +542,6 @@ function formatTime(seconds) {
 function showError(message) {
     alert(message); // Simple for now, could be improved with toast notifications
 }
+function showSuccess(message) {
+    console.log(message); // Success is visible in the UI itself; no popup needed
+}
