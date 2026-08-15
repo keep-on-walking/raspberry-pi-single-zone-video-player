@@ -18,6 +18,7 @@ http://[pi-ip]:5000
 - [Presets](#presets)
 - [File Management](#file-management)
 - [Status](#status)
+- [Sync](#sync)
 
 ---
 
@@ -454,6 +455,69 @@ curl http://192.168.1.100:5000/api/status
 - `stopped` - No video playing
 - `playing` - Video is playing
 - `paused` - Video is paused
+
+---
+
+## Sync
+
+Multi-device sync (`sync.role` in the sync config, see `DESIGN.md` §3).
+`role: "off"` (the default) means this device isn't part of a sync group.
+
+### Get Sync Status
+
+**Endpoint:** `GET /api/sync/status`
+
+**Example:**
+```bash
+curl http://192.168.1.100:5000/api/sync/status
+```
+
+**Response (`role: "off"`):**
+```json
+{ "role": "off" }
+```
+
+**Response (`role: "master"`):** the last broadcast state packet, this
+device's own chrony offset, and every remote heard from recently.
+```json
+{
+  "role": "master",
+  "hostname": "master-stage",
+  "last_packet": {
+    "v": 1, "seq": 4711, "state": "playing", "file": "bout3.mp4",
+    "t0": 1786543210.123456, "pos0": 0.0, "speed": 1.0,
+    "loop": true, "duration": 312.48
+  },
+  "chrony": { "offset_ms": 0.12, "leap_status": "Normal", "available": true },
+  "remotes": {
+    "cm4-stage-left": {
+      "state": "playing", "file": "bout3-angleB.mp4", "pos": 154.32,
+      "err_ms": -6.4, "chrony_ms": 0.3, "warnings": [],
+      "last_seen_ago_s": 0.4, "offline": false
+    }
+  }
+}
+```
+
+**Response (`role: "remote"`):** the last state packet received from the
+master, plus this device's own reception and clock stats.
+```json
+{
+  "role": "remote",
+  "hostname": "cm4-stage-left",
+  "master_addr": "192.168.1.100",
+  "master_seen": true,
+  "last_packet": { "v": 1, "seq": 4711, "state": "playing", "...": "..." },
+  "last_packet_age_s": 0.05,
+  "packets_received": 812,
+  "seq_gaps": 0,
+  "chrony": { "offset_ms": -0.31, "leap_status": "Normal", "available": true }
+}
+```
+
+A remote not heard from for 5 seconds is flagged `"offline": true` in the
+master's view; `master_seen: false` on a remote means the same thing from
+its own side (DESIGN.md §6.2).
 
 ---
 

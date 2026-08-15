@@ -12,6 +12,9 @@ import json
 
 from video_player import VideoPlayer
 from preset_manager import PresetManager
+from sync_config import SyncConfig
+from sync_master import SyncMaster
+from sync_remote import SyncRemote
 
 
 # Configuration
@@ -21,7 +24,7 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv', 'm4v'}
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 
 # Initialize Flask app
-app = Flask(__name__, 
+app = Flask(__name__,
             template_folder='../web/templates',
             static_folder='../web/static')
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
@@ -31,6 +34,19 @@ player = VideoPlayer(video_dir=str(VIDEO_DIR))
 presets = PresetManager()
 
 print(f"📂 Upload folder: {UPLOAD_DIR}")
+
+# Initialize sync (DESIGN.md §3, §12 phase 2). role="off" (the default) is
+# a no-op: no sockets are opened and player behaviour is unchanged.
+sync_config = SyncConfig()
+sync_master = None
+sync_remote = None
+
+if sync_config.data["role"] == "master":
+    sync_master = SyncMaster(sync_config, player)
+    sync_master.start()
+elif sync_config.data["role"] == "remote":
+    sync_remote = SyncRemote(sync_config, player)
+    sync_remote.start()
 
 
 def allowed_file(filename):
@@ -217,6 +233,23 @@ def api_get_resolution():
         "width": player.display_width,
         "height": player.display_height
     })
+
+
+# =============================================================================
+# Sync API (DESIGN.md §9)
+# =============================================================================
+
+@app.route('/api/sync/status', methods=['GET'])
+def api_sync_status():
+    """Sync role, raw sent/received packets, and chrony health"""
+    try:
+        if sync_master:
+            return jsonify(sync_master.get_status())
+        if sync_remote:
+            return jsonify(sync_remote.get_status())
+        return jsonify({"role": "off"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # =============================================================================
