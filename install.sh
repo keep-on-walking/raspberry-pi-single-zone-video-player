@@ -110,7 +110,7 @@ echo "Creating directory structure..."
 
 INSTALL_DIR="/opt/rpi-video-player"
 
-mkdir -p $INSTALL_DIR/{src,web/{static/{css,js},templates},config,data/videos,logs}
+mkdir -p $INSTALL_DIR/{src,web/{static/{css,js},templates},config,data/videos,logs,bin}
 
 echo "Directory structure created"
 
@@ -156,40 +156,13 @@ echo "Configuring X11..."
 # Create X11 config for Pi 5 GPU
 mkdir -p /etc/X11/xorg.conf.d
 
-# Detect which DRI card drives the display: the vc4/display device is the
-# one exposing HDMI connectors (the v3d render node exposes none). This
-# varies between Pi models (and occasionally between boots on the Pi 4).
-KMS_CARD=""
-for c in /sys/class/drm/card*; do
-    [ -e "$c" ] || continue
-    n=$(basename "$c")
-    case "$n" in *-*) continue ;; esac
-    if ls /sys/class/drm/ | grep -q "^${n}-HDMI"; then
-        KMS_CARD="/dev/dri/$n"
-        break
-    fi
-done
-
-if [ -n "$KMS_CARD" ]; then
-    echo "Display DRI device detected: $KMS_CARD"
-    cat > /etc/X11/xorg.conf.d/20-modesetting.conf << EOF
-Section "Device"
-    Identifier "Card1"
-    Driver "modesetting"
-    Option "kmsdev" "$KMS_CARD"
-    Option "ShadowFB" "false"
-EndSection
-EOF
-else
-    echo "Could not detect display DRI device - letting X11 autodetect"
-    cat > /etc/X11/xorg.conf.d/20-modesetting.conf << 'EOF'
-Section "Device"
-    Identifier "Card1"
-    Driver "modesetting"
-    Option "ShadowFB" "false"
-EndSection
-EOF
-fi
+# Which DRI card drives the display (the vc4/display device, not the
+# v3d render-only node) isn't guaranteed stable across reboots, so this
+# can't be a one-time install step - detect-dri-card.sh is installed and
+# re-run by x11-server.service on every start (see ExecStartPre below).
+cp $SCRIPT_DIR/detect-dri-card.sh $INSTALL_DIR/bin/detect-dri-card.sh
+chmod +x $INSTALL_DIR/bin/detect-dri-card.sh
+bash $INSTALL_DIR/bin/detect-dri-card.sh
 
 # Configure X11 wrapper to allow any user to start X server
 echo "Configuring X11 permissions..."
@@ -217,6 +190,7 @@ After=multi-user.target
 Type=simple
 User=$ACTUAL_USER
 Environment=DISPLAY=:1
+ExecStartPre=+$INSTALL_DIR/bin/detect-dri-card.sh
 ExecStart=/usr/bin/X :1 vt7 -noreset
 ExecStartPost=/bin/sleep 3
 ExecStartPost=/bin/sh -c 'DISPLAY=:1 xrandr --output HDMI-1 --mode 1920x1080 2>/dev/null || true'
