@@ -28,7 +28,7 @@ from pathlib import Path
 class VideoPlayer:
     """Manages a single persistent MPV instance"""
 
-    def __init__(self, video_dir="/opt/rpi-video-player/data/videos", mute=False):
+    def __init__(self, video_dir="/opt/rpi-video-player/data/videos", mute=False, audio_device="auto"):
         self.video_dir = Path(video_dir)
         self.socket_path = "/tmp/mpvsocket-player"
         self.process = None
@@ -37,6 +37,11 @@ class VideoPlayer:
         # argument, so it's baked into _build_command() rather than
         # toggled at runtime.
         self.mute = mute
+
+        # Which mpv audio-device to use when not muted (DESIGN.md §3 —
+        # "auto" lets mpv pick; set_audio_device() below can also change
+        # this live, without restarting the instance.
+        self.audio_device = audio_device or "auto"
 
         # Playback state (semantics unchanged from v1.0)
         self.state = {
@@ -135,6 +140,8 @@ class VideoPlayer:
 
         if self.mute:
             cmd.append('--no-audio')
+        elif self.audio_device and self.audio_device != "auto":
+            cmd.append(f'--audio-device={self.audio_device}')
 
         return cmd
 
@@ -394,6 +401,25 @@ class VideoPlayer:
         self.state["volume"] = volume
         self._send_command({"command": ["set_property", "volume", volume]})
         print(f"Volume set to {volume}")
+
+    def get_audio_devices(self):
+        """List available audio output devices (DESIGN.md §3), e.g. HDMI0/
+        HDMI1/USB DAC/analog jack — whatever ALSA exposes. Returns [] if
+        mpv isn't up or the instance is muted-and-unresponsive."""
+        try:
+            response = self._send_command({"command": ["get_property", "audio-device-list"]})
+            if response and "data" in response and response["data"] is not None:
+                return response["data"]
+        except Exception:
+            pass
+        return []
+
+    def set_audio_device(self, device):
+        """Switch the active audio output device live (no instance restart
+        needed, unlike geometry) and remember it for future restarts."""
+        self.audio_device = device or "auto"
+        self._send_command({"command": ["set_property", "audio-device", self.audio_device]})
+        print(f"Audio device set to {self.audio_device}")
 
     def get_playback_position(self):
         """Get current playback position"""

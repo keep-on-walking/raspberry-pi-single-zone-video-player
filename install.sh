@@ -164,6 +164,41 @@ cp $SCRIPT_DIR/detect-dri-card.sh $INSTALL_DIR/bin/detect-dri-card.sh
 chmod +x $INSTALL_DIR/bin/detect-dri-card.sh
 bash $INSTALL_DIR/bin/detect-dri-card.sh
 
+# HDMI output port selection (dashboard-configurable, device_config.py) -
+# re-applied by x11-server.service on every start, same self-healing
+# pattern as the DRI card detection above.
+cp $SCRIPT_DIR/select-hdmi-output.sh $INSTALL_DIR/bin/select-hdmi-output.sh
+chmod +x $INSTALL_DIR/bin/select-hdmi-output.sh
+
+# Boards with two HDMI outputs (e.g. cases that break out both of the
+# Pi 5's micro-HDMI ports to full-size HDMI) need BOTH connectors forced
+# in cmdline.txt, or whichever port isn't in the forced param never gets
+# an active signal - select-hdmi-output.sh can only switch between ports
+# that already have one. Idempotent: only rewrites if something's missing.
+echo "Checking dual-HDMI forced output..."
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+if [ -f "$CMDLINE_FILE" ]; then
+    CURRENT_CMDLINE=$(head -n1 "$CMDLINE_FILE")
+    NEW_CMDLINE="$CURRENT_CMDLINE"
+    CMDLINE_CHANGED=0
+    if ! echo "$CURRENT_CMDLINE" | grep -q 'video=HDMI-A-1:'; then
+        NEW_CMDLINE="$NEW_CMDLINE video=HDMI-A-1:1920x1080M@60D"
+        CMDLINE_CHANGED=1
+    fi
+    if ! echo "$CURRENT_CMDLINE" | grep -q 'video=HDMI-A-2:'; then
+        NEW_CMDLINE="$NEW_CMDLINE video=HDMI-A-2:1920x1080M@60D"
+        CMDLINE_CHANGED=1
+    fi
+    if [ "$CMDLINE_CHANGED" -eq 1 ]; then
+        echo "$NEW_CMDLINE" > "$CMDLINE_FILE"
+        echo "⚠️  Forced both HDMI ports in $CMDLINE_FILE - REBOOT REQUIRED for this to take effect"
+    else
+        echo "Both HDMI ports already forced in $CMDLINE_FILE"
+    fi
+else
+    echo "⚠️  $CMDLINE_FILE not found - HDMI output port selection may only work on one port"
+fi
+
 # Configure X11 wrapper to allow any user to start X server
 echo "Configuring X11 permissions..."
 sed -i 's/allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config 2>/dev/null || \
@@ -193,7 +228,7 @@ Environment=DISPLAY=:1
 ExecStartPre=+$INSTALL_DIR/bin/detect-dri-card.sh
 ExecStart=/usr/bin/X :1 vt7 -noreset
 ExecStartPost=/bin/sleep 3
-ExecStartPost=/bin/sh -c 'DISPLAY=:1 xrandr --output HDMI-1 --mode 1920x1080 2>/dev/null || true'
+ExecStartPost=/bin/sh -c 'DISPLAY=:1 bash $INSTALL_DIR/bin/select-hdmi-output.sh'
 ExecStartPost=/bin/sh -c 'DISPLAY=:1 xset s off; DISPLAY=:1 xset s noblank; DISPLAY=:1 xset -dpms'
 Restart=always
 RestartSec=3

@@ -10,12 +10,14 @@ from pathlib import Path
 import os
 import json
 import socket
+import subprocess
 
 from video_player import VideoPlayer
 from preset_manager import PresetManager
 from sync_config import SyncConfig
 from sync_master import SyncMaster
 from sync_remote import SyncRemote
+from device_config import DeviceConfig
 
 
 # Configuration
@@ -23,6 +25,7 @@ VIDEO_DIR = Path("/opt/rpi-video-player/data/videos")
 UPLOAD_DIR = VIDEO_DIR
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv', 'm4v'}
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
+HDMI_SCRIPT = "/opt/rpi-video-player/bin/select-hdmi-output.sh"
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -38,8 +41,13 @@ sync_config = SyncConfig()
 remote_mute = (sync_config.data["role"] == "remote"
                and not sync_config.data.get("remote_audio", False))
 
+# Device config (HDMI port + audio device) - per-device, persisted,
+# independent of sync role.
+device_config = DeviceConfig()
+
 # Initialize player and preset manager
-player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute)
+player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute,
+                      audio_device=device_config.data["audio"]["device"])
 presets = PresetManager()
 
 print(f"📂 Upload folder: {UPLOAD_DIR}")
@@ -237,6 +245,7 @@ def api_status():
     """Get player status"""
     try:
         status = player.get_status()
+        status["muted"] = player.mute
         return jsonify(status)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -270,6 +279,78 @@ def api_get_resolution():
         "width": player.display_width,
         "height": player.display_height
     })
+
+
+@app.route('/api/display/hdmi-port', methods=['GET'])
+def api_get_hdmi_port():
+    """Get the persisted HDMI output port selection"""
+    return jsonify({"port": device_config.data["display"]["hdmi_port"]})
+
+
+@app.route('/api/display/hdmi-port', methods=['POST'])
+def api_set_hdmi_port():
+    """Set which physical HDMI port drives the display, persisted across
+    reboots. Applies immediately via xrandr against the running X server;
+    requires both connectors to have a forced mode in cmdline.txt (see
+    install.sh) - otherwise the unused port has never had a signal to
+    switch to."""
+    try:
+        data = request.get_json()
+        port = data.get('port')
+
+        if port not in ('auto', 'hdmi-1', 'hdmi-2'):
+            return jsonify({"error": "port must be one of: auto, hdmi-1, hdmi-2"}), 400
+
+        device_config.update({"display": {"hdmi_port": port}})
+
+        try:
+            subprocess.run(['bash', HDMI_SCRIPT], timeout=5,
+                            capture_output=True, text=True, env={**os.environ, 'DISPLAY': ':1'})
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+            print(f"HDMI port switch: {e} (setting saved, applies on next X11 start)")
+
+        return jsonify({"status": "ok", "port": port})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# Audio API (DESIGN.md §3)
+# =============================================================================
+
+@app.route('/api/audio/devices', methods=['GET'])
+def api_list_audio_devices():
+    """List audio output devices mpv can see (HDMI/USB DAC/analog/etc.)"""
+    try:
+        return jsonify({"devices": player.get_audio_devices()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/audio/device', methods=['GET'])
+def api_get_audio_device():
+    """Get the persisted audio device selection"""
+    return jsonify({"device": device_config.data["audio"]["device"]})
+
+
+@app.route('/api/audio/device', methods=['POST'])
+def api_set_audio_device():
+    """Set the audio output device, persisted across reboots. Applies
+    immediately (mpv supports switching audio-device live, no restart
+    needed). No-op on a muted remote until it's unmuted."""
+    try:
+        data = request.get_json()
+        device = data.get('device')
+
+        if not device:
+            return jsonify({"error": "No device provided"}), 400
+
+        device_config.update({"audio": {"device": device}})
+        player.set_audio_device(device)
+
+        return jsonify({"status": "ok", "device": device})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # =============================================================================

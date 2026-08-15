@@ -108,6 +108,27 @@
                     <button id="apply-geometry" class="btn btn-secondary full-width">Apply Geometry</button>
                 </div>
 
+                <!-- Display Output & Audio -->
+                <div class="section">
+                    <h3>Display Output &amp; Audio</h3>
+
+                    <div class="control-group">
+                        <label>HDMI Output:</label>
+                        <select id="hdmi-port-select" class="video-select">
+                            <option value="auto">Auto</option>
+                            <option value="hdmi-1">HDMI 1</option>
+                            <option value="hdmi-2">HDMI 2</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Audio Output: <span id="audio-muted-note" class="muted-note" style="display:none;">(muted — sync remote)</span></label>
+                        <select id="audio-device-select" class="video-select">
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Volume & Loop -->
                 <div class="section">
                     <h3>Playback Settings</h3>

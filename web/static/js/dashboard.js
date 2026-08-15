@@ -83,7 +83,13 @@ async function initializeUI() {
     
     // Display resolution
     document.getElementById('update-resolution').addEventListener('click', handleUpdateResolution);
-    
+
+    // HDMI output + audio device — applied immediately on change, no
+    // separate apply button (matches the volume slider's pattern)
+    document.getElementById('hdmi-port-select').addEventListener('change', handleHdmiPortChange);
+    document.getElementById('audio-device-select').addEventListener('change', handleAudioDeviceChange);
+
+
     // File upload
     document.getElementById('upload-btn').addEventListener('click', () => {
         document.getElementById('file-input').click();
@@ -108,9 +114,65 @@ async function loadInitialData() {
         document.getElementById('display-width').value = resolution.width;
         document.getElementById('display-height').value = resolution.height;
         canvas.setDisplayResolution(resolution.width, resolution.height);
-        
+
+        // Load HDMI output + audio device selections
+        await loadHdmiPort();
+        await loadAudioDevices();
+
     } catch (error) {
         console.error('Failed to load initial data:', error);
+    }
+}
+
+async function loadHdmiPort() {
+    try {
+        const { port } = await apiClient.getHdmiPort();
+        document.getElementById('hdmi-port-select').value = port || 'auto';
+    } catch (error) {
+        console.error('Failed to load HDMI port:', error);
+    }
+}
+
+async function loadAudioDevices() {
+    try {
+        const [{ devices }, { device: current }] = await Promise.all([
+            apiClient.getAudioDevices(),
+            apiClient.getAudioDevice()
+        ]);
+
+        const select = document.getElementById('audio-device-select');
+        select.innerHTML = '<option value="auto">Auto</option>';
+        (devices || []).forEach(d => {
+            if (d.name === 'auto') return; // already added above
+            const option = document.createElement('option');
+            option.value = d.name;
+            option.textContent = d.description || d.name;
+            select.appendChild(option);
+        });
+
+        // Only select the persisted value if mpv actually reported it as
+        // available - otherwise fall back to "auto" rather than showing
+        // a blank/invalid selection.
+        const hasCurrent = Array.from(select.options).some(o => o.value === current);
+        select.value = hasCurrent ? current : 'auto';
+    } catch (error) {
+        console.error('Failed to load audio devices:', error);
+    }
+}
+
+async function handleHdmiPortChange(e) {
+    try {
+        await apiClient.setHdmiPort(e.target.value);
+    } catch (error) {
+        showError('Failed to set HDMI output: ' + error.message);
+    }
+}
+
+async function handleAudioDeviceChange(e) {
+    try {
+        await apiClient.setAudioDevice(e.target.value);
+    } catch (error) {
+        showError('Failed to set audio device: ' + error.message);
     }
 }
 
@@ -500,7 +562,12 @@ async function updateStatus() {
         
         indicator.className = `status-${status.status}`;
         text.textContent = status.status.charAt(0).toUpperCase() + status.status.slice(1);
-        
+
+        // Audio device selector is a no-op while muted (sync remote, §3
+        // decision 2) — say so rather than letting it look broken
+        document.getElementById('audio-muted-note').style.display = status.muted ? 'inline' : 'none';
+        document.getElementById('audio-device-select').disabled = !!status.muted;
+
         // Show/hide seek controls
         if (status.status === 'playing' || status.status === 'paused') {
             document.getElementById('seek-section').style.display = 'block';

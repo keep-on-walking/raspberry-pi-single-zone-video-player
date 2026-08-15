@@ -52,7 +52,28 @@ class APIClient {
     async getDisplayResolution() {
         return this.get('/api/display/resolution');
     }
-    
+
+    async getHdmiPort() {
+        return this.get('/api/display/hdmi-port');
+    }
+
+    async setHdmiPort(port) {
+        return this.post('/api/display/hdmi-port', { port });
+    }
+
+    // Audio
+    async getAudioDevices() {
+        return this.get('/api/audio/devices');
+    }
+
+    async getAudioDevice() {
+        return this.get('/api/audio/device');
+    }
+
+    async setAudioDevice(device) {
+        return this.post('/api/audio/device', { device });
+    }
+
     // Presets
     async listPresets() {
         return this.get('/api/presets');
