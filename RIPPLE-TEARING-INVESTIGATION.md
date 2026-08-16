@@ -1,5 +1,23 @@
 # Playback tearing/rippling investigation (2026-08-16)
 
+## RESOLVED
+
+Root cause: a real mpv regression between `0.38.0` and `0.40.0` (see
+"BREAKTHROUGH" section below). Fix implemented in `install.sh`: mpv is
+now pinned to the known-good `0.38.0-1+b1` build, vendored in
+`vendor/mpv-0.38.0-1+b1/` (not fetched from snapshot.debian.org at
+install time, so this doesn't depend on that archive's availability
+going forward) and held via `apt-mark hold` so a routine `apt upgrade`
+on a deployed device can't silently reintroduce the bug. Confirmed
+clean on a Pi 5 with H.265 content; not yet re-verified on the CM4/Pi 4
+devices used for the earlier H.264 tests, though the bug appearing
+identically across both GPU generations makes it very likely the fix
+holds there too.
+
+Revisit whenever a newer mpv release is available — re-run the test
+below, and if it's clean, remove the pin (delete the `install.sh` block
+and the `vendor/mpv-0.38.0-1+b1/` directory).
+
 ## Symptom
 
 Visible tearing/warping artifact during playback, most obvious on slow
@@ -60,6 +78,13 @@ Each of these was tested directly, not assumed:
   denied`. The running X server holds exclusive DRM master, so this
   couldn't actually be tested live via SSH; a real test needs X stopped
   entirely (e.g. from a separate VT), which wasn't attempted tonight.
+- **GPU generation and codec** — Pi 5 (VideoCore VII) with H.265/HEVC
+  content still tears, identically to CM4/Pi 4 (VideoCore VI) with
+  H.264. See below.
+
+**Not tested, still open:** `--vo=gpu-next` (the newer libplacebo-based
+renderer — notably what mpv used by default on the clean Mac test, but
+never explicitly forced on any Pi tonight).
 
 ## The one variable that matters: mpv itself
 
@@ -108,29 +133,97 @@ hardware is direct DRM/KMS rendering with X stopped entirely (`--vo=gpu
 master — a real test needs a separate VT with X down, not attempted
 tonight).
 
-Plan going forward: test the same content on an actual Pi 5 (not
-tested at all tonight — both devices used were Pi4-generation VideoCore
-VI hardware, CM4 and Pi 4 2GB, which are electrically identical GPUs
-despite the different form factors). Pi 5's VideoCore VII + RP1 I/O
-chip is a genuinely different architecture, and the operator has prior
-first-hand experience of clean playback on a Pi 5 with this same
-software — real, if not perfectly controlled, evidence in its favor.
-Content will likely be re-encoded to H.265 at the same time (for Pi 5's
-better HEVC decode support), which means that test won't cleanly
-isolate hardware-vs-codec, but does match the actual intended
-production setup.
+**Update: tested on an actual Pi 5.** VideoCore VII + RP1 I/O chip,
+genuinely different silicon from the VideoCore VI on the CM4/Pi 4 used
+for every earlier test — and tested with H.265/HEVC content instead of
+H.264 too. **Tearing reproduced identically.** `ffplay -fs` on the same
+Pi 5, same HEVC file, stayed completely clean — matching the exact
+pattern seen all night on the older hardware with H.264.
+
+This is the decisive result: `ffplay` is clean across every
+combination tested (CM4 + H.264, Pi 4 + H.264, Pi 5 + H.265). `mpv`
+tears on all of them, across every `--vo`/`--hwdec`/fullscreen/
+compositor combination tried. Two GPU generations, two codecs, one
+consistently clean player, one consistently not — this rules out GPU
+generation, decode method, and codec as explanations entirely, and
+narrows it to mpv's own rendering/presentation path specifically, on
+the Raspberry Pi Linux/X11 stack in general (not one specific chip).
+
+## BREAKTHROUGH: it's an mpv regression between 0.38.0 and 0.40.0
+
+Tested `mpv 0.38.0-1+b1` (downgraded from `0.40.0-3+deb13u1` via a
+pinned Debian snapshot install — `deb
+http://snapshot.debian.org/archive/debian/20241210T023135Z/ trixie
+main`, `apt-get install mpv:arm64=0.38.0-1+b1`) on the Pi 5, same file,
+same everything else:
+
+- **`--hwdec=no`**: clean. No tearing, confirmed over extended playback
+  (through multiple panning sections, well past a minute of continuous
+  playback).
+- **`--hwdec=auto`**: hardware decode engages (`Using hardware decoding
+  (drm)`) with **no `Mapping hardware decoded surface failed` errors at
+  all** — the DRM-PRIME import bug found on 0.40.0 is also absent here.
+
+This is the answer: a real regression was introduced somewhere between
+mpv `0.38.0` and `0.40.0` that both (a) breaks DRM-PRIME hardware
+surface import on this driver stack, and (b) causes visible tearing
+even in the plain software-decode path. Two releases, `0.38.0` clean
+on both counts, `0.40.0` broken on both counts.
+
+**Practical next steps:**
+1. Narrow down further if there's appetite — test `0.39.0` (once a
+   working arm64 build/snapshot is found — the exact `0.39.0-1` arm64
+   build referenced on mpv's snapshot.debian.org package page wasn't
+   actually indexed in the snapshot tested; `0.38.0-1+b1` was what was
+   actually available and used instead) to bisect which specific
+   release introduced it — valuable for the upstream bug report, not
+   required for the practical fix.
+2. **Test the same downgrade on the CM4/Pi4 devices** (`mpv-master`,
+   `mpv-remote`) — if `0.38.0` fixes it there too (very likely, given
+   the bug appears to be in shared vc4/DRM rendering code rather than
+   anything Pi-5-specific), the practical, ship-tonight answer for the
+   whole project is: **pin mpv to `0.38.0` on every device**, rather
+   than waiting on an upstream fix, changing player, or any of the
+   architectural options considered earlier.
+3. File the upstream mpv bug report regardless — this is now a genuinely
+   strong, bisectable regression report (works in 0.38.0, broken in
+   0.40.0, both the DRM-PRIME import and the tearing symptom together),
+   which is exactly the kind of report that gets fixed fast.
+
+**A separate, genuinely concrete bug found along the way on the Pi 5:**
+with `--hwdec=auto`, hardware decode does engage (`Using hardware
+decoding (drm)`), but mpv fails to import the resulting DRM-PRIME
+buffer for display on *every single frame*, on both `--vo=gpu`
+(`Mapping hardware decoded surface failed`) and `--vo=gpu-next`
+(`mapping DRM dmabuf failed` / `Failed rendering frame!`). This is a
+real, separate, reproducible bug — hardware decode is not actually
+usable at all on this Pi 5 + mpv combination right now, regardless of
+the tearing issue. However, forcing `--hwdec=no` (plain software
+decode, no DRM-PRIME surface involved at all, confirmed via a clean
+`yuv420p` frame format with zero mapping errors) **still tears**. This
+rules the DRM-PRIME failure out as the cause of the visible artifact —
+it's a real bug worth reporting on its own, but the tearing survives
+even with that entire code path completely bypassed, pointing squarely
+at mpv's basic GPU buffer-swap/presentation logic itself, independent
+of decode method.
 
 ## Recommended next steps
 
 1. **File this with mpv's own project** (github.com/mpv-player/mpv
-   issues) — this is a clean, reproducible, well-isolated report: same
-   file/hardware/OS, one player (`ffplay`) is clean, `mpv` tears
-   regardless of `--vo`, `--hwdec`, fullscreen state, or
+   issues) — this is now a strong, reproducible, well-isolated report:
+   two different Pi GPU generations (VideoCore VI and VII), two
+   different codecs (H.264 and H.265/HEVC), `ffplay` clean on every
+   combination, `mpv` tearing on all of them regardless of `--vo`,
+   `--hwdec` (including `drm-copy`), fullscreen state, or
    `--x11-bypass-compositor`. That's exactly the kind of report
    upstream can actually act on, and is a more appropriate venue than
    continuing to guess flags — they'll know the actual difference
    between `ffplay`'s SDL2 presentation path and mpv's GPU VO path on
    this driver stack far better than trial-and-error from outside.
+   (One quick, cheap thing worth trying first if there's appetite:
+   `--vo=gpu-next`, the newer libplacebo renderer — untested on any Pi
+   tonight, and notably what mpv used by default on the one clean
+   non-Pi comparison, a MacBook.)
 2. **Install the missing VDPAU driver** and re-confirm hardware decode
    is genuinely active (`hwdec-current` in `mpv --hwdec=auto`'s
    property list, or checking the startup log no longer shows the

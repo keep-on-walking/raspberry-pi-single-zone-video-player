@@ -103,6 +103,35 @@ apt install -y \
 echo "System packages installed"
 
 # =============================================================================
+# Pin mpv to a known-good version
+# =============================================================================
+# mpv 0.40.0 (the current Debian trixie package, just installed above) has a
+# real regression on the vc4/v3d GPU driver stack used by every Pi model this
+# project targets: visible screen tearing during playback, and a separate
+# DRM-PRIME hardware-decode surface import failure ("Mapping hardware decoded
+# surface failed" on every frame). Confirmed via extensive real-hardware
+# testing across a CM4, a Pi 4, and a Pi 5 (different GPU generations),
+# H.264 and H.265 content, and every mpv --vo/--hwdec/fullscreen/compositor
+# combination tried - see RIPPLE-TEARING-INVESTIGATION.md for the full story.
+# mpv 0.38.0 does not have either bug. Vendored here (not fetched from
+# snapshot.debian.org at install time) so every install is reproducible and
+# doesn't depend on that archive's availability going forward.
+#
+# Revisit this whenever a newer mpv release is available: re-run the tearing
+# test from RIPPLE-TEARING-INVESTIGATION.md, and if a newer version is clean,
+# remove this pin (delete this block and the vendor/mpv-0.38.0-1+b1/ dir).
+echo "Pinning mpv to known-good 0.38.0 (see RIPPLE-TEARING-INVESTIGATION.md)..."
+MPV_PIN_DIR="$SCRIPT_DIR/vendor/mpv-0.38.0-1+b1"
+if [ -d "$MPV_PIN_DIR" ]; then
+    apt install -y "$MPV_PIN_DIR"/libmpv2_0.38.0-1+b1_arm64.deb "$MPV_PIN_DIR"/mpv_0.38.0-1+b1_arm64.deb
+    apt-mark hold mpv libmpv2
+    echo "mpv pinned to $(mpv --version | head -1)"
+else
+    echo "⚠️  $MPV_PIN_DIR not found - staying on the repo's default mpv"
+    echo "   (this will very likely have the tearing bug - see RIPPLE-TEARING-INVESTIGATION.md)"
+fi
+
+# =============================================================================
 # Create Directory Structure
 # =============================================================================
 
