@@ -132,6 +132,38 @@ Phase 3 needs to be applied regardless of which script shape a given test
 has, not just the ones where remote happens to be constructed first.
 Purely a local dev-harness issue; separate physical Pis never hit this.
 
+## A real bug found on real hardware, fixed post-merge
+
+Real-hardware testing (`pause` → wait → `resume`, 3 cycles) showed a
+consistent ~300ms error right after resume, decreasing at the expected
+~20ms/s nudge rate but taking 10+ seconds to settle — much worse than the
+near-0ms release-instant result from local Mac testing. Root cause:
+`sync_remote.py`'s scheduled-release branch captured `now` *before*
+calling `player._prime()` (which blocks and can take real, variable time
+— worse on real storage/lower-RAM devices than a dev-machine SSD) but
+didn't start the `threading.Timer` until *after* priming completed.
+Since `Timer(delay, fn).start()` counts `delay` seconds from the moment
+`.start()` is called, the stale `now` meant every release fired at
+`t0 + <priming duration>` instead of at `t0` — silently late by exactly
+how long priming took, which real hardware apparently does non-trivially
+often. `sync_master.py`'s own `play()`/`resume()` never had this bug
+(`t0` is computed *after* priming there), which is why local testing
+against a fast SSD didn't surface it clearly.
+
+Fixed by recomputing `now` fresh immediately before constructing the
+`Timer`, and — since resume is the case this bites hardest and most
+often — added the same "skip re-priming if already correctly paused"
+optimization the master's `resume()` already had, so the common
+pause→resume cycle doesn't re-load the file at all and has the full lead
+time available for the timer to actually hit.
+
+Re-verified locally: the same pause/resume-3x test that showed ~300ms/
+10+s-to-settle on real hardware now shows ~25-35ms immediately after
+release and ~16-18ms settled within 4-5s, consistently across 3 cycles —
+this should be re-run on the actual Pi's to confirm it closes the gap
+there too, since that's the environment that surfaced the bug in the
+first place.
+
 ## Not yet verified — needs real hardware
 
 - **True scheduled-start precision on separate physical devices.** The

@@ -241,18 +241,40 @@ class SyncRemote:
             # exactly at t0 via a timer, not the 5Hz chase loop's own
             # cadence (which would add up to 200ms of its own jitter and
             # defeat the point of scheduling in the first place).
-            try:
-                ok = self.player._prime(str(local_path), seek_to=pos0)
-            except FileNotFoundError:
-                ok = False
-            if not ok:
-                self.warnings = ["missing-file"]
-                return
-            self.player.state["loop"] = loop
+            #
+            # Resume special case: if we're already paused at this exact
+            # file/position (from the preceding "paused" broadcast),
+            # skip re-priming entirely — a full reload is wasted work
+            # that eats into the same lead-time budget the release timer
+            # depends on, mirroring what SyncMaster.resume() already does
+            # on the master side.
+            already_primed = (
+                self.player.state["status"] == "paused"
+                and self.player.state["source"] == str(local_path)
+                and abs((self.player.get_playback_position() or 0.0) - pos0) < 0.5
+            )
+            if not already_primed:
+                try:
+                    ok = self.player._prime(str(local_path), seek_to=pos0)
+                except FileNotFoundError:
+                    ok = False
+                if not ok:
+                    self.warnings = ["missing-file"]
+                    return
+                self.player.state["loop"] = loop
             self.player.set_speed(1.0)
             self._pending_release_t0 = t0
+            # threading.Timer's delay counts from .start(), which happens
+            # *after* _prime() above — priming is blocking and can take a
+            # real, variable amount of time (especially on real storage,
+            # unlike a fast dev-machine SSD), so the delay must be
+            # measured from a fresh "now", not the one captured before
+            # priming. Using the stale value here would release at
+            # t0 + <priming duration> instead of at t0 — silently late by
+            # exactly however long priming took.
+            delay = max(0.0, t0 - time.time())
             self._release_timer = threading.Timer(
-                t0 - now, self._do_scheduled_release, args=(duration,)
+                delay, self._do_scheduled_release, args=(duration,)
             )
             self._release_timer.daemon = True
             self._release_timer.start()
