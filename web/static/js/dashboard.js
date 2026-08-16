@@ -689,7 +689,10 @@ let syncInterval;
 const SYNC_GOOD_MS = 50; // matches the DESIGN.md T4 acceptance target
 
 function startSyncPolling() {
-    syncInterval = setInterval(updateSyncStatus, 10000);
+    // 2s, matching the main status poll — DESIGN.md T16 wants the
+    // freewheel warning up in <10s; at 10s this + MASTER_SEEN_TIMEOUT_S
+    // (5s) could add up to 15s worst case.
+    syncInterval = setInterval(updateSyncStatus, 2000);
     updateSyncStatus(); // Initial update
 }
 
@@ -704,9 +707,14 @@ async function updateSyncStatus() {
         const panel = document.getElementById('sync-panel');
         if (!sync.role || sync.role === 'off') {
             panel.style.display = 'none';
+            document.getElementById('sync-banner').style.display = 'none';
             return;
         }
         panel.style.display = 'flex';
+
+        // Only a remote can freewheel; a master with no remotes is just idle.
+        const banner = document.getElementById('sync-banner');
+        banner.style.display = (sync.role === 'remote' && !sync.master_seen) ? 'flex' : 'none';
 
         const badge = document.getElementById('sync-role-badge');
         badge.textContent = sync.role.toUpperCase();

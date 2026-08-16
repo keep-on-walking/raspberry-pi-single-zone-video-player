@@ -45,19 +45,44 @@ remote_mute = (sync_config.data["role"] == "remote"
 # independent of sync role.
 device_config = DeviceConfig()
 
-# Initialize player and preset manager
-player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute,
-                      audio_device=device_config.data["audio"]["device"])
-presets = PresetManager()
-
 # Ticker overlay: a second, independent persistent mpv instance for a
 # secondary video strip (e.g. a bottom-of-screen ticker played alongside
 # an RTSP stream). Always muted, never touched by sync — it's a
 # per-device directly-commanded feature, not part of the declared-state
 # protocol. Distinct socket_path avoids colliding with `player`'s.
+#
+# Constructed (and parked off-screen) *before* the main player, and that
+# order matters, not just the parked position. With no window manager
+# running (bare X server, install.sh), stacking is literally "whichever
+# window got mapped most recently" — there's no WM to enforce --ontop or
+# to guarantee a window that's moved out of the way gets properly
+# re-exposed underneath. The ticker's own constructor launches its mpv
+# instance at the VideoPlayer default (fullscreen, 0,0,1920,1080) before
+# the parking set_geometry() below ever runs — if the main player already
+# existed at that point, this briefly maps a second fullscreen black
+# window on top of it, and getting the main window visible again after
+# depends on mpv correctly redrawing on X Expose, which real hardware
+# testing showed isn't reliable here (surfaced as a bottom cutoff
+# persisting through a remote reboot even with the ticker's *steady-state*
+# position already fixed off-screen). Building+parking the ticker fully
+# first sidesteps that: its brief fullscreen phase has nothing to cover
+# yet, and the main player, constructed and mapped last, is guaranteed to
+# end up on top without ever needing anything to be re-exposed.
 ticker_player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=True,
                              socket_path="/tmp/mpvsocket-ticker")
-ticker_player.set_geometry(0, 980, 1920, 100)  # bottom strip default
+# Parked just below the visible 1920x1080 frame, not overlapping it. The
+# dashboard's "Apply Ticker Geometry" default (0,980,1920,100 -
+# web/templates/dashboard.html) is what an operator who actually wants a
+# bottom-strip ticker clicks to reclaim this space on purpose — that's a
+# runtime-only change too, not persisted, so it resets to this parked
+# position on every service restart/reboot the same as everything else
+# here.
+ticker_player.set_geometry(0, 1080, 1920, 100)
+
+# Main player and presets — player is constructed last (see above).
+player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute,
+                      audio_device=device_config.data["audio"]["device"])
+presets = PresetManager()
 
 print(f"📂 Upload folder: {UPLOAD_DIR}")
 

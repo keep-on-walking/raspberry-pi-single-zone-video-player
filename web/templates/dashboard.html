@@ -17,6 +17,13 @@
             </div>
         </header>
 
+        <!-- Freewheel warning (DESIGN.md §13 decision 5): only shown on a
+             remote while it's playing on its own clock with no master
+             seen. Deliberately louder than the sync-panel strip below. -->
+        <div id="sync-banner" class="sync-banner" style="display: none;">
+            ⚠ SYNC INACTIVE — master not seen. Playing on local clock.
+        </div>
+
         <!-- Sync status: hidden entirely when sync.role is "off" -->
         <div id="sync-panel" class="sync-panel" style="display: none;">
             <span id="sync-role-badge" class="sync-role-badge"></span>

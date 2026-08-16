@@ -69,6 +69,24 @@ body {
     50% { opacity: 0.5; }
 }
 
+/* Freewheel warning (DESIGN.md §13 decision 5) - prominent by design,
+   distinct from the small sync-panel status strip below it. */
+.sync-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    background: var(--danger);
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    text-align: center;
+    animation: pulse 2s ease-in-out infinite;
+}
+
 /* Sync status */
 .sync-panel {
     display: flex;
