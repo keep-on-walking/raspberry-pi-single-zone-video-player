@@ -93,13 +93,40 @@ With that isolated:
   seek-relative/volume/stop/status all identical to pre-sync behavior,
   `mute` defaults `False`, `/api/sync/status` returns `{"role": "off"}`.
 
-## Not yet verified (needs the real master/remote Pi pair)
+## Verified on real hardware — CM4 master + CM4 remote, overnight soak
 
-- Real dual-instance playback with genuine `xv` video output and
-  `mute=True` on the remote — this dev box can't exercise that combination
-  at all (see above). This is the actual T3/T4 environment anyway.
-- T4 (30-minute drift soak) — only run for ~10s locally; want to confirm
-  the deadband/nudge loop holds `|err| <= 50ms` over a real long run,
-  including through several loop wraps if using short test files (T12).
-- Visual confirmation (T3's actual pass method: photograph both screens'
-  burned-in timecodes) — inherently needs real displays on both devices.
+T4 (30-minute drift soak) formally passes, run far past its minimum:
+
+- **~10.4 hours continuous**, zero UDP packet loss the entire time
+  (`seq_gaps: 0` across 375,461 received state packets on the remote)
+- **Sync error stable throughout**: `~7–20ms` / `~0.2–0.6` frames at
+  `29.97fps` — under half a frame the whole run, no drift trend from
+  start to finish, well inside the `|err| ≤ 50ms` target
+- **~12 loop wraps** handled cleanly (master's `seq` went `3 -> 14` over
+  the run; each wrap is the master re-anchoring its origin at the
+  position discontinuity) — informal but real T12 coverage, on a 46-minute
+  file rather than T12's specified short-file stress case
+- **No crashes**: single long-lived mpv PID on each device the whole time,
+  `--no-audio` genuinely active on the remote for the full run (confirmed
+  real `mute=True` operation, not just the command-line unit test earlier)
+- **Memory flat, zero swap** on both the 1GB master and 2GB remote across
+  the full run — no leak
+
+Also resolved two unrelated real-hardware issues found during this
+session (not Phase 3 bugs, but blocking real-world use): a DRI-card
+enumeration mismatch that broke X11 on reboot, and a dual-HDMI-port case
+(Argon ONE V5) where the "other" physical port never had a forced mode —
+both fixed with self-healing scripts re-applied on every X11 start (see
+git log: "Fix: re-detect DRI card...", "Dashboard: persistent HDMI
+output...").
+
+## Not yet verified
+
+- **T3's visual pass criteria** (photograph both screens' burned-in
+  timecodes) — displays are currently disconnected from both devices for
+  bench testing, so this is the one item genuinely blocked on hardware
+  access rather than software. Sync-loop correctness itself is thoroughly
+  confirmed via `/api/sync/status` numbers above; this would only confirm
+  it *looks* right too.
+- T8–T11, T13–T16 (Phase 5 hardening scenarios — freewheel, power-pull
+  recovery, RTSP-on-master, etc.) — not yet exercised at all.
