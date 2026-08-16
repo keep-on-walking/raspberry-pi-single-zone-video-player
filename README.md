@@ -1,260 +1,210 @@
-# Raspberry Pi Single-Zone Video Player
+# Raspberry Pi Video Player — Single-Zone & Multi-Device Sync
 
-Professional video player with draggable/resizable window control, optimized for Raspberry Pi 5. Perfect for LED walls, digital signage, and live production.
+Professional video player with draggable/resizable window control, now with
+optional **frame-near-synced playback across multiple Raspberry Pi devices**.
+Runs standalone exactly as before, or as a **master** driving one or more
+**remotes** that play their own local files in sync with it — each device
+showing its own content, all moving together.
+
+> This documents the `multisync` branch. If you just want the original
+> single-device player, everything below works identically with sync left
+> at its default (`role: "off"`) — nothing about single-device use changed.
 
 ## ✨ Features
 
-- 🎬 **Single resizable video zone** with full positioning control
-- 🖱️ **Drag-and-drop interface** - Position and resize via web dashboard
-- 💾 **Layout presets** - Save and load window configurations
-- 📡 **RTSP streaming** - Play IP camera feeds and network streams
-- 📁 **File upload** - Upload videos directly through web interface
-- 🔁 **Loop playback** - Continuous video playback
-- 🎛️ **HTTP API** - Full REST API for Node-RED and automation
-- ⚡ **Hardware accelerated** - Optimized for Pi 5 GPU
-- 🖥️ **Headless operation** - Black screen when idle (Pi OS Lite)
-- 🔄 **Persistent settings** - Layouts survive reboots
+**Core player** (unchanged from the original release):
+- 🎬 Single resizable video zone with full positioning control
+- 🖱️ Drag-and-drop dashboard, layout presets, RTSP streaming, file upload
+- 🎛️ Full HTTP API for Node-RED and automation
+- ⚡ Hardware-accelerated decode, persistent mpv instance (fast, low-jitter starts)
+
+**New: multi-device sync**
+- 🔗 One master, any number of remotes — each remote plays its **own local
+  file** (same basename, different content per device is fine)
+- 🎯 Frame-near sync (±1-2 frames target; real-world testing has shown
+  single-digit-ms accuracy over multi-hour runs — see [GUIDE.md](GUIDE.md))
+- ⏱️ Scheduled starts — play/resume land at the same wall-clock instant on
+  every device, not "close enough after a moment"
+- 📺 Per-device HDMI output port and audio device selection, persisted
+  across reboots
+- 🖼️ Synced screensaver — auto-plays when the master is idle, in sync,
+  across every device
+- 📊 Live sync status dashboard — role, drift, clock health, per-remote view
+- 🎞️ Ticker overlay — a second, independently-controlled video strip
+  (e.g. for a bottom-of-screen ticker alongside an RTSP feed)
+- 🔓 Direct per-device override for maintenance/RTSP workflows via Node-RED
 
 ## 📋 Requirements
 
 ### Hardware
-- **Raspberry Pi 5** (recommended) or Raspberry Pi 4
-- MicroSD card (8GB minimum) or NVMe storage
-- HDMI display
-- Network connection (WiFi or Ethernet)
+- Raspberry Pi 5, Pi 4, or CM4 (any mix — master and remotes don't need to
+  match) — see [GUIDE.md](GUIDE.md) for real hardware notes and CPU/storage
+  findings from testing
+- HDMI display (or none — the player runs fine headless once display output
+  is forced; see GUIDE.md)
+- Wired Ethernet for any device using sync (chrony's sub-ms clock agreement
+  assumes a quiet wired LAN)
 
 ### Software
-- **Raspberry Pi OS Lite (64-bit)** - Headless recommended
-- Fresh installation recommended
+- Raspberry Pi OS Lite (64-bit)
 
 ## 🚀 Quick Start
 
-### One-Line Installation
-
-SSH into your Pi and run:
+### Single device (no sync)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/keep-on-walking/raspberry-pi-single-zone-video-player/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/keep-on-walking/raspberry-pi-single-zone-video-player/multisync/install.sh | sudo bash
 ```
 
-Or manual installation:
+Reboot, then open `http://[pi-ip]:5000`. Behaves exactly like the original
+single-zone player — sync defaults to off.
+
+### Multi-device sync
+
+Full step-by-step provisioning (hostnames, chrony, roles, verification) is
+in **[GUIDE.md](GUIDE.md)** — it's a real walkthrough, not just a summary,
+including the exact commands used to bring up and verify a real master +
+remote pair. Short version:
 
 ```bash
-git clone https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player.git
+git clone -b multisync https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player.git
 cd raspberry-pi-single-zone-video-player
 sudo bash install.sh
+sudo bash chrony-setup.sh --role master   # or: --role remote --master-host <master-hostname>.local
 ```
 
-### After Installation
-
-1. **Reboot** the Pi: `sudo reboot`
-2. **Wait 30 seconds** for services to start
-3. **Access dashboard**: `http://[your-pi-ip]:5000`
-4. **Upload a video** and start playing!
-
-The screen will be black when no video is playing (this is normal).
+Then set `sync.role` (`master` or `remote`) and restart the service — see
+GUIDE.md for the exact command, since there's no dashboard toggle for this
+yet.
 
 ## 🎮 Usage
 
-### Web Dashboard
+Open `http://[pi-ip]:5000` for the dashboard. Every panel is covered in
+detail in [GUIDE.md](GUIDE.md); quick summary:
 
-Access the web interface at `http://[pi-ip]:5000`
-
-**Default Resolution:** System runs at 1920x1080 for optimal performance. For 4K displays, see [RESOLUTION.md](RESOLUTION.md) to configure 4K output.
-
-**Video Stretching:** Videos will stretch to fill the configured window geometry. This is by design for LED wall and display applications where exact positioning matters more than aspect ratio.
-
-**Video Source:**
-- Select local file from dropdown OR enter RTSP URL
-- Click Play to start
-
-**Window Positioning:**
-- **Drag the blue zone** to move
-- **Drag corners** to resize
-- Or enter X, Y, Width, Height manually
-
-**Save Layouts:**
-- Position window as desired
-- Enter preset name
-- Click "Save Current Layout"
-- Load anytime with one click
+- **Visual Layout** — drag/resize the video zone, presets
+- **Video Source** — local file or RTSP
+- **Window Geometry** — precise X/Y/W/H
+- **Ticker Overlay** — a second video strip, independent of the main one
+- **Display Output & Audio** — which HDMI port, which audio device
+- **Screensaver** — auto-plays in sync when the master goes idle
+- **Sync status panel** (appears automatically when sync is active) — role,
+  live drift, per-remote health
 
 ### Supported File Formats
 
-**Video Codecs:**
-- **HEVC/H.265** - Best performance on Pi 5 (~30% CPU with hardware decoding)
-- **H.264** - Works but uses software decoding (~100% CPU on Pi 5)
+**Video Codecs:** HEVC/H.265 (hardware-accelerated on Pi 5), H.264 (works,
+software decode). **Containers:** MP4, AVI, MKV, MOV, WebM, FLV, WMV, M4V.
+**Streaming:** RTSP.
 
-**Containers:**
-- MP4, AVI, MKV, MOV
-- WebM, FLV, WMV, M4V
-
-**Streaming:**
-- RTSP streams (e.g., `rtsp://camera-ip:554/stream`)
-
-**Performance Note for Pi 5:** 
-Raspberry Pi 5 only has hardware decoding for HEVC (H.265), not H.264. For best performance, convert videos to HEVC:
 ```bash
+# Convert to HEVC for best Pi 5 performance
 ffmpeg -i input.mp4 -c:v libx265 -crf 23 -c:a copy output.mp4
 ```
 
-### Example Layouts
-
-**Full Screen:**
-- X: 0, Y: 0, Width: 1920, Height: 1080
-
-**Left Half:**
-- X: 0, Y: 0, Width: 960, Height: 1080
-
-**Picture-in-Picture (Bottom Right):**
-- X: 1280, Y: 720, Width: 640, Height: 360
-
-**Centered 80%:**
-- X: 192, Y: 108, Width: 1536, Height: 864
-
 ## 🔌 HTTP API
-
-Full REST API for automation and Node-RED integration.
-
-### Play Video
 
 ```bash
 curl -X POST http://pi-ip:5000/api/play \
   -H "Content-Type: application/json" \
   -d '{"source": "video.mp4", "loop": true, "volume": 50}'
-```
 
-### Stop Playback
-
-```bash
-curl -X POST http://pi-ip:5000/api/stop
-```
-
-### Set Window Position
-
-```bash
-curl -X POST http://pi-ip:5000/api/geometry \
-  -H "Content-Type: application/json" \
-  -d '{"x": 0, "y": 0, "width": 1920, "height": 1080}'
-```
-
-### Get Status
-
-```bash
 curl http://pi-ip:5000/api/status
+curl http://pi-ip:5000/api/sync/status
 ```
 
-**See [API.md](API.md) for complete API documentation.**
+**[API.md](API.md)** has the full endpoint reference. **[GUIDE.md](GUIDE.md)**
+has worked examples for every feature, including Node-RED patterns for
+sync-aware playback, RTSP-on-remote overrides, and the ticker overlay.
 
 ## 🎯 Use Cases
 
-### LED Wall Control
-Replace expensive Resolume setups with a $100 Raspberry Pi:
-- Position video anywhere on LED wall
-- Save layouts for different content
-- Control via Node-RED
+- **Multi-screen video walls / multi-angle displays** — each screen its own
+  camera angle or content, frame-synced
+- **LED wall control** — position video anywhere, save layouts, control via
+  Node-RED
+- **Digital signage** — loop content, synced screensaver when idle
+- **Live production** — RTSP feeds, optional ticker overlay, multi-device
+  positioning
 
-### Digital Signage
-- Loop promotional videos
-- Resize for different screen areas
-- Remote control via API
+## 📊 Performance (real hardware, this session's testing)
 
-### Live Production
-- RTSP camera feeds
-- Positioning for multi-camera setups
-- Quick layout switching with presets
-
-### Video Testing
-- Test videos at different sizes/positions
-- Quick upload and playback
-- Hardware-accelerated smooth playback
-
-## 📊 Performance
-
-**Raspberry Pi 5:**
-- HEVC/H.265: ~30% CPU, hardware accelerated
-- H.264: ~100% CPU, software decoding only
-- 1080p @ 60fps: Smooth with HEVC
-- RAM: 150MB
-
-**Raspberry Pi 4:**
-- 1080p H.264: ~12% CPU, 120MB RAM (hardware accelerated)
-- 720p recommended for best performance
-
-**Note:** Pi 5 only supports HEVC hardware decoding. Use HEVC videos for optimal performance.
+- **CM4, 1GB RAM, eMMC** (master role, decoding + audio output): ~62% of one
+  core for 1080p HEVC
+- **CM4, 2GB RAM, SD card** (remote role, muted): ~48-53% of one core
+- Both comfortably handle sync's chase loop (5Hz) and 10Hz state broadcast
+  on top of playback — see GUIDE.md for what happens under combined load
+  (ticker + main content, scaled/resized output) and how to check for
+  yourself
+- Sync accuracy in a 10.4-hour real-hardware soak test: **7-20ms sustained**,
+  zero UDP packet loss
 
 ## 🔧 Troubleshooting
 
-### Video Won't Play
+Common issues and their real fixes are in **[GUIDE.md](GUIDE.md)**'s
+troubleshooting section, including two that came up during real deployment:
+a DRI-card enumeration mismatch that breaks the display after a reboot, and
+a dual-HDMI-port case where video plays correctly but nothing reaches the
+physically connected screen. Quick pointers:
 
 ```bash
-# Check if service is running
-ps aux | grep video_controller
+# Service status
+sudo systemctl status x11-server video-player
 
-# Check logs
+# Logs
 tail -f /opt/rpi-video-player/logs/app.log
+tail -f /opt/rpi-video-player/logs/error.log
 
-# Manual start for debugging
-cd /opt/rpi-video-player/src
-DISPLAY=:0 /opt/rpi-video-player/venv/bin/python3 video_controller.py
-```
-
-### Screen Not Black
-
-```bash
-# Check if X11 is running
-ps aux | grep X
-
-# Restart the Pi
-sudo reboot
-```
-
-### Can't Resize Window
-
-- Hard refresh browser: `Ctrl+Shift+R` (or `Cmd+Shift+R` on Mac)
-- Hover slowly over corners until cursor changes
-- Try zooming browser in/out
-
-### Performance Issues
-
-```bash
-# Check MPV is using hardware decoding
-# Look for "hwdec" in logs
-tail -f /opt/rpi-video-player/logs/app.log
+# Sync health
+curl http://localhost:5000/api/sync/status | python3 -m json.tool
 ```
 
 ## 🔄 Updating
 
 ```bash
 cd raspberry-pi-single-zone-video-player
-git pull
+git pull origin multisync
 sudo bash install.sh
-sudo reboot
+sudo systemctl restart video-player
 ```
+
+A reboot is only needed after changes to `cmdline.txt` (the installer tells
+you explicitly when that's the case, e.g. the dual-HDMI forcing step).
 
 ## 📁 File Structure
 
 ```
 /opt/rpi-video-player/
+├── bin/
+│   ├── detect-dri-card.sh       # self-healing DRI card detection
+│   └── select-hdmi-output.sh    # self-healing HDMI port selection
 ├── src/
-│   ├── video_player.py       # MPV manager
-│   ├── preset_manager.py     # Layout presets
-│   └── video_controller.py   # Flask API
-├── web/
-│   ├── templates/
-│   │   └── dashboard.html
-│   └── static/
-│       ├── css/
-│       ├── js/
-│       └── ...
-├── data/
-│   └── videos/               # Uploaded videos
+│   ├── video_player.py          # persistent mpv manager
+│   ├── video_controller.py      # Flask API + dashboard routes
+│   ├── preset_manager.py        # layout presets
+│   ├── sync_config.py           # sync role/tuning schema
+│   ├── sync_master.py           # declared-state broadcast + orchestration
+│   ├── sync_remote.py           # chase loop + scheduled receive
+│   ├── device_config.py         # HDMI port / audio device persistence
+│   └── chrony_status.py         # clock health reporting
+├── web/                         # dashboard (templates/static)
+├── data/videos/                 # uploaded videos (shared across features)
 ├── config/
-│   └── presets.json          # Saved layouts
+│   ├── presets.json
+│   ├── sync.json                # role, tuning, screensaver
+│   └── device.json              # HDMI port, audio device
 └── logs/
-    ├── app.log
-    └── error.log
 ```
+
+## 📚 Further reading
+
+- **[GUIDE.md](GUIDE.md)** — full setup and operation guide, every feature
+  explained, real troubleshooting, Node-RED patterns
+- **[API.md](API.md)** — complete HTTP API reference
+- **[DESIGN.md](DESIGN.md)** — the sync protocol's technical design and
+  build contract
+- **PHASE1-NOTES.md** through **PHASE4-NOTES.md** — implementation history
+  and real-hardware verification results for each build phase
 
 ## 🤝 Contributing
 
@@ -265,14 +215,7 @@ https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player
 
 MIT License - See LICENSE file
 
-## 🙏 Credits
-
-Built for LED wall control and live production use cases.
-
-Optimized for Raspberry Pi 5 with hardware acceleration.
-
 ---
 
-**Need help?** Open an issue on GitHub or check the [API documentation](API.md).
-
-**Happy video playing! 🎬**
+**Need help?** Start with [GUIDE.md](GUIDE.md), then [API.md](API.md) for
+endpoint details, or open an issue on GitHub.
