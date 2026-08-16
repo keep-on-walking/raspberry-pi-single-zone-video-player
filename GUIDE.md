@@ -402,15 +402,34 @@ before pointing this player at it.
 ## Ticker overlay
 
 A **second, fully independent persistent mpv instance** — not video
-compositing, just a second X11 window positioned wherever you want (a
-bottom strip by default, `1920x100` at `y=980`). Always muted. Never part
-of the sync protocol — it's a per-device, directly-commanded feature, the
-same as the RTSP override workflow.
+compositing, just a second X11 window positioned wherever you want.
+Always muted. Never part of the sync protocol — it's a per-device,
+directly-commanded feature, the same as the RTSP override workflow.
+
+**Important: it starts parked off-screen** (`y=1080`, just below the
+visible 1080-tall frame), not at a visible position. This is
+deliberate — with no window manager running, an idle ticker window left
+at a visible default would sit on top of the main video's window
+permanently, covering that strip regardless of whether anyone ever
+actually uses the ticker (this was a real bug, fixed in the
+multisync branch — see `RIPPLE-TEARING-INVESTIGATION.md`'s sibling
+ticker-occlusion fix in the commit history for the story).
+
+**This means: playing the ticker alone does not make it visible.**
+`/api/ticker/status` will correctly show `"status": "playing"` with
+the position advancing, but nothing appears on screen until you also
+set its geometry to somewhere on-screen — the dashboard's "Apply
+Ticker Geometry" button (prefilled with the classic bottom-strip
+position, `0, 980, 1920, 100`) does this, or call
+`/api/ticker/geometry` directly. If the ticker "isn't working," check
+`/api/ticker/geometry` before assuming playback failed — it's very
+likely playing correctly but parked out of view.
 
 ```bash
 # Just the ticker
 curl -X POST http://<device-ip>:5000/api/ticker/play -H "Content-Type: application/json" -d '{"source": "ticker.mp4", "loop": true}'
 curl -X POST http://<device-ip>:5000/api/ticker/stop
+# Bring it into view (or play() alone leaves it parked off-screen - see above)
 curl -X POST http://<device-ip>:5000/api/ticker/geometry -H "Content-Type: application/json" -d '{"x": 0, "y": 900, "width": 1920, "height": 150}'
 
 # Main content + ticker in one call (the Node-RED-button use case)
