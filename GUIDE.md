@@ -108,6 +108,17 @@ detail matters.
 Run on **every** device (master and each remote), whether or not it'll use
 sync — steps 6+ only matter if it will.
 
+**On a fresh device with nothing cloned yet**, one command does the whole
+clone + install — `install.sh` self-bootstraps: installs `git` if missing,
+clones the `multisync` branch (its default), and re-launches itself from
+the clone automatically:
+```bash
+curl -sSL https://raw.githubusercontent.com/keep-on-walking/raspberry-pi-single-zone-video-player/multisync/install.sh | sudo bash
+```
+
+**Or clone manually first** if you'd rather inspect the repo before
+running anything (also the path to use once already cloned, for pulling
+updates):
 ```bash
 git clone -b multisync https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player.git
 cd raspberry-pi-single-zone-video-player
