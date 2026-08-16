@@ -40,7 +40,7 @@ from chrony_status import get_chrony_offset_ms
 BROADCAST_HZ = 10
 SEEK_JUMP_MS = 300  # position delta beyond this while otherwise steady = a seek
 OFFLINE_AFTER_S = 5  # DESIGN.md §6.2: remote not heard from in 5s is offline
-SCREENSAVER_RESUME_DELAY_S = 3.0  # DESIGN.md §6.4 "short delay", not config-exposed
+SCREENSAVER_RESUME_DELAY_S = 30.0  # DESIGN.md §6.4 "short delay" - fallback if config.screensaver.delay_s is absent
 
 
 def _map_state(status):
@@ -392,8 +392,9 @@ class SyncMaster:
             print(f"sync_master: screensaver file missing: {file}")
             return
 
+        delay_s = screensaver.get("delay_s", SCREENSAVER_RESUME_DELAY_S)
         timer = threading.Timer(
-            SCREENSAVER_RESUME_DELAY_S, self._maybe_start_screensaver,
+            delay_s, self._maybe_start_screensaver,
             args=(file, screensaver.get("loop", True))
         )
         timer.daemon = True

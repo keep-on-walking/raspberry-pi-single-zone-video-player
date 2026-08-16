@@ -129,6 +129,32 @@
                     </div>
                 </div>
 
+                <!-- Synced Screensaver -->
+                <div class="section">
+                    <h3>Screensaver</h3>
+
+                    <div class="control-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="screensaver-enabled">
+                            Enable automatic screensaver
+                        </label>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Screensaver Video:</label>
+                        <select id="screensaver-file-select" class="video-select">
+                            <option value="">Select a video...</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Delay before screensaver starts (seconds):</label>
+                        <input type="number" id="screensaver-delay" value="30" min="0" step="1" class="input-number">
+                    </div>
+
+                    <button id="save-screensaver" class="btn btn-secondary full-width">Save Screensaver Settings</button>
+                </div>
+
                 <!-- Volume & Loop -->
                 <div class="section">
                     <h3>Playback Settings</h3>

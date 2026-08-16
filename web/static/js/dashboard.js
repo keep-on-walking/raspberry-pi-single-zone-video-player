@@ -89,6 +89,9 @@ async function initializeUI() {
     document.getElementById('hdmi-port-select').addEventListener('change', handleHdmiPortChange);
     document.getElementById('audio-device-select').addEventListener('change', handleAudioDeviceChange);
 
+    // Screensaver — explicit Save button (three related fields saved
+    // together, rather than one API call per field)
+    document.getElementById('save-screensaver').addEventListener('click', handleSaveScreensaver);
 
     // File upload
     document.getElementById('upload-btn').addEventListener('click', () => {
@@ -119,8 +122,41 @@ async function loadInitialData() {
         await loadHdmiPort();
         await loadAudioDevices();
 
+        // Screensaver settings — after loadFileList() so the file
+        // dropdown already has options to select among
+        await loadScreensaverConfig();
+
     } catch (error) {
         console.error('Failed to load initial data:', error);
+    }
+}
+
+async function loadScreensaverConfig() {
+    try {
+        const settings = await apiClient.getScreensaver();
+        document.getElementById('screensaver-enabled').checked = !!settings.enabled;
+        document.getElementById('screensaver-file-select').value = settings.file || '';
+        document.getElementById('screensaver-delay').value = settings.delay_s ?? 30;
+    } catch (error) {
+        console.error('Failed to load screensaver config:', error);
+    }
+}
+
+async function handleSaveScreensaver() {
+    try {
+        const enabled = document.getElementById('screensaver-enabled').checked;
+        const file = document.getElementById('screensaver-file-select').value;
+        const delay_s = parseFloat(document.getElementById('screensaver-delay').value);
+
+        if (enabled && !file) {
+            showError('Select a screensaver video, or disable the screensaver');
+            return;
+        }
+
+        await apiClient.setScreensaver({ enabled, file, delay_s });
+        showSuccess('Screensaver settings saved');
+    } catch (error) {
+        showError('Failed to save screensaver settings: ' + error.message);
     }
 }
 
@@ -306,16 +342,17 @@ async function loadFileList() {
     try {
         const files = await apiClient.listFiles();
         
-        // Update file select dropdown
-        const select = document.getElementById('video-file');
-        select.innerHTML = '<option value="">Select a video...</option>';
-        files.forEach(file => {
-            const option = document.createElement('option');
-            option.value = file.name;
-            option.textContent = file.name;
-            select.appendChild(option);
+        // Update file select dropdowns (main source + screensaver picker)
+        [document.getElementById('video-file'), document.getElementById('screensaver-file-select')].forEach(select => {
+            select.innerHTML = '<option value="">Select a video...</option>';
+            files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file.name;
+                option.textContent = file.name;
+                select.appendChild(option);
+            });
         });
-        
+
         // Update file list display
         const fileList = document.getElementById('file-list');
         fileList.innerHTML = '';

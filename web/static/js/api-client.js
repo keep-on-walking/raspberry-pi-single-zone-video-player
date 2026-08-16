@@ -43,6 +43,14 @@ class APIClient {
     async getSyncStatus() {
         return this.get('/api/sync/status');
     }
+
+    async getScreensaver() {
+        return this.get('/api/sync/screensaver');
+    }
+
+    async setScreensaver(settings) {
+        return this.post('/api/sync/screensaver', settings);
+    }
     
     // Display resolution
     async setDisplayResolution(width, height) {

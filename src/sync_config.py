@@ -23,7 +23,8 @@ DEFAULT_CONFIG = {
     "screensaver": {
         "enabled": False,
         "file": "screensaver.mp4",
-        "loop": True
+        "loop": True,
+        "delay_s": 30  # DESIGN.md §6.4 "short delay" - dashboard-configurable
     }
 }
 

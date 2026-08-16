@@ -395,6 +395,40 @@ def api_sync_status():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/sync/screensaver', methods=['GET'])
+def api_get_screensaver():
+    """Get the synced-screensaver settings (DESIGN.md §6.4)"""
+    return jsonify(sync_config.data["screensaver"])
+
+
+@app.route('/api/sync/screensaver', methods=['POST'])
+def api_set_screensaver():
+    """Set synced-screensaver settings, persisted across reboots. Applies
+    live — on a master, the next idle transition picks up the new
+    enabled/file/delay immediately, no service restart needed (mirrors
+    how the master and remote sync objects already share this same
+    SyncConfig instance by reference)."""
+    try:
+        data = request.get_json()
+        patch = {}
+        if 'enabled' in data:
+            patch['enabled'] = bool(data['enabled'])
+        if 'file' in data:
+            patch['file'] = data['file']
+        if 'loop' in data:
+            patch['loop'] = bool(data['loop'])
+        if 'delay_s' in data:
+            delay_s = float(data['delay_s'])
+            if delay_s < 0:
+                return jsonify({"error": "delay_s must be >= 0"}), 400
+            patch['delay_s'] = delay_s
+
+        sync_config.update({"screensaver": patch})
+        return jsonify(sync_config.data["screensaver"])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # =============================================================================
 # Preset API
 # =============================================================================
