@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
 """
-Sync remote (DESIGN.md §6.1, §6.2, §7, §12 phases 2-3).
+Sync remote (DESIGN.md §6.1, §6.2, §6.3, §6.4, §7, §12 phases 2-4).
 
 Listens for the master's UDP state broadcasts, reports raw packets +
 clock health via /api/sync/status, and sends 1 Hz heartbeats back to the
 master, unicast to the source address of the last state packet received
 (DESIGN.md §6.2) — no master address needs to be configured up front.
 
-Phase 3 adds the chase loop (§7): once a declared state names a file,
-this module drives the local persistent mpv to play it and continuously
-corrects position at 5 Hz (deadband -> nudge -> hard-seek). There is no
-scheduled-transition preroll yet (DESIGN.md §6.3, §12 phase 4) — a new
-"playing" declaration is applied immediately via VideoPlayer.play(), and
-the chase loop converges from there. That's the "pass T3 crudely" bar
-phase 3 is held to; frame-exact scheduled starts are phase 4's job.
+The chase loop (§7): once a declared state names a file, this module
+drives the local persistent mpv to play it and continuously corrects
+position at 5 Hz (deadband -> nudge -> hard-seek).
+
+Scheduled transitions (§6.3, phase 4): when a "playing" packet's t0 is in
+the future, the remote primes now and releases exactly at t0 via a
+threading.Timer — not the 5Hz chase loop's cadence, which would add up
+to 200ms of its own jitter and defeat the point. A packet whose t0 has
+already passed (late join, or the remote was offline) falls back to the
+Phase 3 behaviour: immediate join + chase-loop convergence — exactly
+DESIGN.md's "remotes that were offline converge afterwards via the chase
+loop."
+
+Local screensaver (§6.1 decision 4, phase 4): when the master declares
+`unmanaged` (RTSP - sync doesn't cover it), a remote with a screensaver
+configured plays it locally, looping, unsynced - there's no shared
+position to chase for live content. Plain `idle` stays plain black; the
+master handles idle->screensaver entirely itself (§6.4) by declaring
+normal "playing" state, which remotes chase exactly like any other file
+via the existing scheduled/chase machinery - no separate remote-side
+"idle" screensaver path is needed.
 """
 
 import json
@@ -53,6 +67,10 @@ class SyncRemote:
         self.err_ms = None
         self.warnings = []
 
+        # Scheduled-transition state (DESIGN.md §6.3, phase 4)
+        self._release_timer = None      # pending threading.Timer, or None
+        self._pending_release_t0 = None  # t0 we're primed-and-waiting for, or None
+
         self._stop = threading.Event()
         self._recv_sock = None
         self._send_sock = None
@@ -83,6 +101,9 @@ class SyncRemote:
 
     def stop(self):
         self._stop.set()
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
         for t in self._threads:
             t.join(timeout=2)
         if self._recv_sock:
@@ -145,20 +166,30 @@ class SyncRemote:
 
         if state != self._applied_state or file != self._applied_file:
             self._handle_transition(packet)
+        elif state == "playing" and self._pending_release_t0 is not None:
+            # Still primed and waiting for a scheduled release - did the
+            # master reschedule to a different t0 (rapid re-play before
+            # the original one fired)? Re-handle if so. Steady-state t0
+            # changes (loop wraps, drift re-anchors) don't reach here —
+            # they only happen once _pending_release_t0 is back to None
+            # after release, and are handled by _converge()'s hard-seek,
+            # not by re-priming.
+            if packet.get("t0") != self._pending_release_t0:
+                self._handle_transition(packet)
 
         # Only converge once the local player has actually confirmed a
         # successful load — a missing file or a failed/slow play() must
         # not send the chase loop nudging/seeking a player with nothing
         # loaded (it never guesses, per DESIGN.md §6.1 file-resolution).
-        if self._applied_state == "playing" and self._load_ok:
+        # Also not while still primed-and-waiting for a scheduled release
+        # (§6.3) — position isn't moving yet.
+        if self._applied_state == "playing" and self._load_ok and self._pending_release_t0 is None:
             self._converge(packet)
         else:
             self.err_ms = None
 
     def _handle_transition(self, packet):
-        """Apply a new declared state/file. No scheduled preroll yet
-        (DESIGN.md §6.3 is phase 4) — playing/paused are applied right
-        away and the chase loop converges from there."""
+        """Apply a new declared state/file."""
         state = packet.get("state")
         file = packet.get("file")
         self._applied_state = state
@@ -168,11 +199,24 @@ class SyncRemote:
         self.warnings = []
         self._load_ok = False
 
-        if state in ("idle", "unmanaged"):
-            # Phase 4 adds local screensaver playback for `unmanaged`
-            # (DESIGN.md §6.4); for now, and always for `idle`, black.
+        # Cancel any pending scheduled release from a previous transition
+        # (e.g. operator hit play then stop before the earlier one fired).
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
+        self._pending_release_t0 = None
+
+        if state == "idle":
+            # The master handles idle->screensaver entirely itself
+            # (DESIGN.md §6.4) by declaring normal "playing" state, which
+            # this remote chases like any other file - genuine idle here
+            # really does mean nothing is playing anywhere. Black.
             if self.player.state["status"] != "stopped":
                 self.player.stop()
+            return
+
+        if state == "unmanaged":
+            self._handle_unmanaged()
             return
 
         if not file:
@@ -190,10 +234,36 @@ class SyncRemote:
         pos0 = packet.get("pos0", 0.0)
         duration = packet.get("duration") or 0.0
         loop = packet.get("loop", True)
+        t0 = packet.get("t0", now)
+
+        if state == "playing" and t0 > now:
+            # Scheduled start (DESIGN.md §6.3): prime now, release
+            # exactly at t0 via a timer, not the 5Hz chase loop's own
+            # cadence (which would add up to 200ms of its own jitter and
+            # defeat the point of scheduling in the first place).
+            try:
+                ok = self.player._prime(str(local_path), seek_to=pos0)
+            except FileNotFoundError:
+                ok = False
+            if not ok:
+                self.warnings = ["missing-file"]
+                return
+            self.player.state["loop"] = loop
+            self.player.set_speed(1.0)
+            self._pending_release_t0 = t0
+            self._release_timer = threading.Timer(
+                t0 - now, self._do_scheduled_release, args=(duration,)
+            )
+            self._release_timer.daemon = True
+            self._release_timer.start()
+            return
 
         try:
             if state == "playing":
-                expected = pos0 + (now - packet.get("t0", now)) * packet.get("speed", 1.0)
+                # Late join (t0 already passed) - the master was already
+                # playing when we started listening, or we were offline.
+                # Immediate join + chase-loop convergence, same as Phase 3.
+                expected = pos0 + (now - t0) * packet.get("speed", 1.0)
                 if loop and duration > 0:
                     expected = expected % duration
                 ok = self.player.play(file, loop=loop, seek_to=max(0.0, expected))
@@ -216,8 +286,41 @@ class SyncRemote:
 
         self._load_ok = True
         self.player.set_speed(1.0)
+        self._check_duration_mismatch(duration)
 
-        if duration > 0:
+    def _do_scheduled_release(self, duration):
+        """Timer callback (DESIGN.md §6.3): release a primed source
+        exactly at its scheduled t0. Runs on the Timer's own thread."""
+        self._release_timer = None
+        self._pending_release_t0 = None
+        self.player._release()
+        self.player.state["status"] = "playing"
+        self._load_ok = True
+        self._check_duration_mismatch(duration)
+
+    def _handle_unmanaged(self):
+        """DESIGN.md §6.1 decision 4: RTSP on master. A remote with a
+        screensaver configured plays it locally, looping, unsynced —
+        there's no shared position to chase for live content. Otherwise
+        black, same as idle."""
+        screensaver = self.config.data.get("screensaver", {})
+        file = screensaver.get("file")
+        ok = False
+        if screensaver.get("enabled") and file:
+            local_path = self.player.video_dir / file
+            if local_path.exists():
+                try:
+                    ok = self.player.play(file, loop=screensaver.get("loop", True))
+                except FileNotFoundError:
+                    ok = False
+        if ok:
+            self._load_ok = True
+            return
+        if self.player.state["status"] != "stopped":
+            self.player.stop()
+
+    def _check_duration_mismatch(self, duration):
+        if duration and duration > 0:
             local_duration = self.player.get_duration() or 0.0
             if abs(local_duration - duration) > self.config.data["duration_tolerance_s"]:
                 self.warnings.append("duration-mismatch")
@@ -341,5 +444,6 @@ class SyncRemote:
                 "fps": fps,
                 "speed": self._last_speed,
                 "warnings": list(self.warnings),
+                "pending_release_t0": self._pending_release_t0,
             },
         }

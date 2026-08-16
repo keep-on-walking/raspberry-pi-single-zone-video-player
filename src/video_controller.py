@@ -115,7 +115,7 @@ def api_play():
 
         loop = data.get('loop', True)
         volume = data.get('volume', 50)
-        
+
         # Apply default preset geometry if set
         default_geometry = presets.get_default()
         if default_geometry:
@@ -125,9 +125,14 @@ def api_play():
                 default_geometry['width'],
                 default_geometry['height']
             )
-        
-        success = player.play(source, loop=loop, volume=volume)
-        
+
+        # On a sync master, this schedules a frame-exact synced start
+        # (DESIGN.md §6.3) instead of playing immediately.
+        if sync_master:
+            success = sync_master.play(source, loop=loop, volume=volume)
+        else:
+            success = player.play(source, loop=loop, volume=volume)
+
         if success:
             return jsonify({"status": "playing", "source": source})
         else:
@@ -147,7 +152,10 @@ def api_stop():
         if sync_locked(data):
             return sync_locked_response()
 
-        player.stop()
+        if sync_master:
+            sync_master.stop()
+        else:
+            player.stop()
         return jsonify({"status": "stopped"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -161,7 +169,18 @@ def api_pause():
         if sync_locked(data):
             return sync_locked_response()
 
-        player.pause()
+        if sync_master:
+            # pause() is immediate (operator expects instant response);
+            # resume() is a scheduled synced start, same as play()
+            # (DESIGN.md §6.3) - which one depends on the state *before*
+            # this call, so decide first rather than letting a single
+            # toggle method pick.
+            if player.state["status"] == "playing":
+                sync_master.pause()
+            elif player.state["status"] == "paused":
+                sync_master.resume()
+        else:
+            player.pause()
         return jsonify({"status": player.state["status"]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -180,8 +199,11 @@ def api_seek():
 
         if position is None:
             return jsonify({"error": "No position provided"}), 400
-        
-        player.seek(float(position))
+
+        if sync_master:
+            sync_master.seek(float(position))
+        else:
+            player.seek(float(position))
         return jsonify({"status": "ok", "position": position})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -198,7 +220,10 @@ def api_seek_relative():
 
         seconds = data.get('seconds', 0)
 
-        player.seek_relative(float(seconds))
+        if sync_master:
+            sync_master.seek_relative(float(seconds))
+        else:
+            player.seek_relative(float(seconds))
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
