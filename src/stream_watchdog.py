@@ -74,10 +74,14 @@ def restart_stream(source, loop=True, volume=50):
         # First, force kill any existing MPV
         kill_mpv()
         
-        # Then restart via API
+        # Then restart via API. override:true is required on a sync
+        # remote (DESIGN.md §3 decision 3 locks /api/play there) - a
+        # manually-overridden RTSP stream on a remote would otherwise
+        # freeze forever, since a restart without it gets rejected with
+        # 409. Harmless everywhere else: ignored unless the lock applies.
         response = requests.post(
             f"{API_URL}/api/play",
-            json={"source": source, "loop": loop, "volume": volume},
+            json={"source": source, "loop": loop, "volume": volume, "override": True},
             timeout=5
         )
         if response.status_code == 200:
