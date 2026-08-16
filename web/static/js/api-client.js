@@ -51,6 +51,27 @@ class APIClient {
     async setScreensaver(settings) {
         return this.post('/api/sync/screensaver', settings);
     }
+
+    // Ticker overlay
+    async tickerPlay(source, loop = true) {
+        return this.post('/api/ticker/play', { source, loop });
+    }
+
+    async tickerStop() {
+        return this.post('/api/ticker/stop');
+    }
+
+    async getTickerStatus() {
+        return this.get('/api/ticker/status');
+    }
+
+    async getTickerGeometry() {
+        return this.get('/api/ticker/geometry');
+    }
+
+    async setTickerGeometry(x, y, width, height) {
+        return this.post('/api/ticker/geometry', { x, y, width, height });
+    }
     
     // Display resolution
     async setDisplayResolution(width, height) {

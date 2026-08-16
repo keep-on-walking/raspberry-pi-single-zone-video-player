@@ -50,6 +50,15 @@ player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=remote_mute,
                       audio_device=device_config.data["audio"]["device"])
 presets = PresetManager()
 
+# Ticker overlay: a second, independent persistent mpv instance for a
+# secondary video strip (e.g. a bottom-of-screen ticker played alongside
+# an RTSP stream). Always muted, never touched by sync — it's a
+# per-device directly-commanded feature, not part of the declared-state
+# protocol. Distinct socket_path avoids colliding with `player`'s.
+ticker_player = VideoPlayer(video_dir=str(VIDEO_DIR), mute=True,
+                             socket_path="/tmp/mpvsocket-ticker")
+ticker_player.set_geometry(0, 980, 1920, 100)  # bottom strip default
+
 print(f"📂 Upload folder: {UPLOAD_DIR}")
 
 sync_master = None
@@ -100,44 +109,55 @@ def health():
 # Player Control API
 # =============================================================================
 
+def _play_main(source, loop, volume, data):
+    """Core dispatch for playing the main (sync-aware) content — shared
+    by /api/play and /api/play-with-ticker. Returns (success, error)
+    where error is a ready-to-return (jsonify(...), status) tuple, or
+    None on success."""
+    if sync_locked(data):
+        return None, sync_locked_response()
+
+    if not source:
+        return None, (jsonify({"error": "No source provided"}), 400)
+
+    # Apply default preset geometry if set
+    default_geometry = presets.get_default()
+    if default_geometry:
+        player.set_geometry(
+            default_geometry['x'],
+            default_geometry['y'],
+            default_geometry['width'],
+            default_geometry['height']
+        )
+
+    # On a sync master, this schedules a frame-exact synced start
+    # (DESIGN.md §6.3) instead of playing immediately.
+    if sync_master:
+        success = sync_master.play(source, loop=loop, volume=volume)
+    else:
+        success = player.play(source, loop=loop, volume=volume)
+
+    return success, None
+
+
 @app.route('/api/play', methods=['POST'])
 def api_play():
     """Play a video"""
     try:
         data = request.get_json()
-
-        if sync_locked(data):
-            return sync_locked_response()
-
         source = data.get('source')
-        if not source:
-            return jsonify({"error": "No source provided"}), 400
-
         loop = data.get('loop', True)
         volume = data.get('volume', 50)
 
-        # Apply default preset geometry if set
-        default_geometry = presets.get_default()
-        if default_geometry:
-            player.set_geometry(
-                default_geometry['x'],
-                default_geometry['y'],
-                default_geometry['width'],
-                default_geometry['height']
-            )
-
-        # On a sync master, this schedules a frame-exact synced start
-        # (DESIGN.md §6.3) instead of playing immediately.
-        if sync_master:
-            success = sync_master.play(source, loop=loop, volume=volume)
-        else:
-            success = player.play(source, loop=loop, volume=volume)
+        success, error = _play_main(source, loop, volume, data)
+        if error:
+            return error
 
         if success:
             return jsonify({"status": "playing", "source": source})
         else:
             return jsonify({"error": "Failed to start playback"}), 500
-            
+
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
@@ -272,6 +292,115 @@ def api_status():
         status = player.get_status()
         status["muted"] = player.mute
         return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# Ticker API — a second, independent overlay instance (see
+# video_controller.py's ticker_player init comment). Never lockout-gated:
+# the chase loop never touches this instance, so there's no conflict for
+# the remote lockout to guard against (same reasoning as geometry/presets
+# staying open on a remote).
+# =============================================================================
+
+@app.route('/api/ticker/play', methods=['POST'])
+def api_ticker_play():
+    """Play a video in the ticker overlay"""
+    try:
+        data = request.get_json()
+        source = data.get('source')
+        if not source:
+            return jsonify({"error": "No source provided"}), 400
+
+        loop = data.get('loop', True)
+        success = ticker_player.play(source, loop=loop)
+
+        if success:
+            return jsonify({"status": "playing", "source": source})
+        else:
+            return jsonify({"error": "Failed to start ticker playback"}), 500
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/ticker/stop', methods=['POST'])
+def api_ticker_stop():
+    """Stop ticker playback"""
+    try:
+        ticker_player.stop()
+        return jsonify({"status": "stopped"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/ticker/status', methods=['GET'])
+def api_ticker_status():
+    """Get ticker overlay status"""
+    try:
+        return jsonify(ticker_player.get_status())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/ticker/geometry', methods=['GET'])
+def api_get_ticker_geometry():
+    """Get ticker overlay window geometry"""
+    return jsonify(ticker_player.geometry)
+
+
+@app.route('/api/ticker/geometry', methods=['POST'])
+def api_set_ticker_geometry():
+    """Set ticker overlay window geometry"""
+    try:
+        data = request.get_json()
+        x = data.get('x')
+        y = data.get('y')
+        width = data.get('width')
+        height = data.get('height')
+
+        if None in [x, y, width, height]:
+            return jsonify({"error": "Missing geometry parameters"}), 400
+
+        ticker_player.set_geometry(x, y, width, height)
+        return jsonify({"status": "ok", "geometry": ticker_player.geometry})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/play-with-ticker', methods=['POST'])
+def api_play_with_ticker():
+    """Play the main source and the ticker overlay together in one call
+    (e.g. an RTSP stream plus a bottom-strip ticker video) - the
+    single-command workflow this endpoint exists for. The main source
+    still goes through the normal sync-aware/lockout path
+    (override:true required on a remote); the ticker never does."""
+    try:
+        data = request.get_json()
+        source = data.get('source')
+        loop = data.get('loop', True)
+        volume = data.get('volume', 50)
+
+        success, error = _play_main(source, loop, volume, data)
+        if error:
+            return error
+        if not success:
+            return jsonify({"error": "Failed to start main playback"}), 500
+
+        result = {"status": "playing", "source": source}
+
+        ticker_source = data.get('ticker_source')
+        if ticker_source:
+            ticker_loop = data.get('ticker_loop', True)
+            ticker_ok = ticker_player.play(ticker_source, loop=ticker_loop)
+            result["ticker"] = {"status": "playing" if ticker_ok else "error",
+                                 "source": ticker_source}
+
+        return jsonify(result)
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

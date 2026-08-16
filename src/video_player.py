@@ -28,9 +28,12 @@ from pathlib import Path
 class VideoPlayer:
     """Manages a single persistent MPV instance"""
 
-    def __init__(self, video_dir="/opt/rpi-video-player/data/videos", mute=False, audio_device="auto"):
+    def __init__(self, video_dir="/opt/rpi-video-player/data/videos", mute=False, audio_device="auto",
+                 socket_path=None):
         self.video_dir = Path(video_dir)
-        self.socket_path = "/tmp/mpvsocket-player"
+        # Distinct socket paths let a second instance (e.g. the ticker
+        # overlay) coexist with the main one without colliding.
+        self.socket_path = socket_path or "/tmp/mpvsocket-player"
         self.process = None
 
         # Remotes launch muted (DESIGN.md §3 decision 2) — a launch

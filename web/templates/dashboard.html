@@ -108,6 +108,44 @@
                     <button id="apply-geometry" class="btn btn-secondary full-width">Apply Geometry</button>
                 </div>
 
+                <!-- Ticker Overlay -->
+                <div class="section">
+                    <h3>Ticker Overlay</h3>
+
+                    <div class="control-group">
+                        <label>Ticker Video:</label>
+                        <select id="ticker-file-select" class="video-select">
+                            <option value="">Select a video...</option>
+                        </select>
+                    </div>
+
+                    <div class="playback-controls">
+                        <button id="ticker-play-btn" class="btn btn-primary">▶ Play Ticker</button>
+                        <button id="ticker-stop-btn" class="btn btn-danger">⏹ Stop Ticker</button>
+                    </div>
+
+                    <div class="geometry-grid">
+                        <div>
+                            <label>X:</label>
+                            <input type="number" id="ticker-geom-x" value="0" min="0" class="input-number">
+                        </div>
+                        <div>
+                            <label>Y:</label>
+                            <input type="number" id="ticker-geom-y" value="980" min="0" class="input-number">
+                        </div>
+                        <div>
+                            <label>Width:</label>
+                            <input type="number" id="ticker-geom-width" value="1920" min="10" class="input-number">
+                        </div>
+                        <div>
+                            <label>Height:</label>
+                            <input type="number" id="ticker-geom-height" value="100" min="10" class="input-number">
+                        </div>
+                    </div>
+
+                    <button id="apply-ticker-geometry" class="btn btn-secondary full-width">Apply Ticker Geometry</button>
+                </div>
+
                 <!-- Display Output & Audio -->
                 <div class="section">
                     <h3>Display Output &amp; Audio</h3>

@@ -93,6 +93,11 @@ async function initializeUI() {
     // together, rather than one API call per field)
     document.getElementById('save-screensaver').addEventListener('click', handleSaveScreensaver);
 
+    // Ticker overlay
+    document.getElementById('ticker-play-btn').addEventListener('click', handleTickerPlay);
+    document.getElementById('ticker-stop-btn').addEventListener('click', handleTickerStop);
+    document.getElementById('apply-ticker-geometry').addEventListener('click', handleApplyTickerGeometry);
+
     // File upload
     document.getElementById('upload-btn').addEventListener('click', () => {
         document.getElementById('file-input').click();
@@ -126,8 +131,57 @@ async function loadInitialData() {
         // dropdown already has options to select among
         await loadScreensaverConfig();
 
+        // Ticker overlay geometry
+        await loadTickerGeometry();
+
     } catch (error) {
         console.error('Failed to load initial data:', error);
+    }
+}
+
+async function loadTickerGeometry() {
+    try {
+        const geometry = await apiClient.getTickerGeometry();
+        document.getElementById('ticker-geom-x').value = geometry.x;
+        document.getElementById('ticker-geom-y').value = geometry.y;
+        document.getElementById('ticker-geom-width').value = geometry.width;
+        document.getElementById('ticker-geom-height').value = geometry.height;
+    } catch (error) {
+        console.error('Failed to load ticker geometry:', error);
+    }
+}
+
+async function handleTickerPlay() {
+    try {
+        const source = document.getElementById('ticker-file-select').value;
+        if (!source) {
+            showError('Please select a ticker video');
+            return;
+        }
+        await apiClient.tickerPlay(source, true);
+    } catch (error) {
+        showError('Failed to play ticker: ' + error.message);
+    }
+}
+
+async function handleTickerStop() {
+    try {
+        await apiClient.tickerStop();
+    } catch (error) {
+        showError('Failed to stop ticker: ' + error.message);
+    }
+}
+
+async function handleApplyTickerGeometry() {
+    try {
+        const x = parseInt(document.getElementById('ticker-geom-x').value);
+        const y = parseInt(document.getElementById('ticker-geom-y').value);
+        const width = parseInt(document.getElementById('ticker-geom-width').value);
+        const height = parseInt(document.getElementById('ticker-geom-height').value);
+
+        await apiClient.setTickerGeometry(x, y, width, height);
+    } catch (error) {
+        showError('Failed to apply ticker geometry: ' + error.message);
     }
 }
 
@@ -342,8 +396,8 @@ async function loadFileList() {
     try {
         const files = await apiClient.listFiles();
         
-        // Update file select dropdowns (main source + screensaver picker)
-        [document.getElementById('video-file'), document.getElementById('screensaver-file-select')].forEach(select => {
+        // Update file select dropdowns (main source, screensaver, ticker)
+        [document.getElementById('video-file'), document.getElementById('screensaver-file-select'), document.getElementById('ticker-file-select')].forEach(select => {
             select.innerHTML = '<option value="">Select a video...</option>';
             files.forEach(file => {
                 const option = document.createElement('option');
