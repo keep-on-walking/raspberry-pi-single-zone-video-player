@@ -30,6 +30,12 @@ using production's exact launch flags. The other three combinations
 (`0.40.0`+`xv`, `0.40.0`+`gpu`, `0.38.0`+`xv`) all tear - both fixes
 are genuinely required together, neither one alone is sufficient.
 
+**Confirmed end-to-end through the actual app** (not just a manual mpv
+invocation): deployed both fixes to `mpv-master-pi5` via `install.sh`,
+verified the running processes show `--vo=gpu`, played
+`Lola-Young-fake.mp4` from the dashboard, clean through panning shots.
+This is the real result, not a synthetic test.
+
 Not yet re-verified on the CM4/Pi 4 devices used for earlier tests in
 this investigation, though the shared `vc4`/`v3d` driver stack across
 all Pi generations tested makes it very likely both fixes hold there
