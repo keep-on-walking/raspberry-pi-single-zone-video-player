@@ -89,11 +89,13 @@ echo ""
 
 echo "Installing system packages..."
 apt update
+# mpv is deliberately not in this list - it's pinned to a known-good
+# version by the dedicated block below, which needs full control over
+# it (including on a re-run against an already-pinned/held device).
 apt install -y \
     python3 \
     python3-pip \
     python3-venv \
-    mpv \
     xserver-xorg \
     xinit \
     x11-xserver-utils \
@@ -123,12 +125,16 @@ echo "System packages installed"
 echo "Pinning mpv to known-good 0.38.0 (see RIPPLE-TEARING-INVESTIGATION.md)..."
 MPV_PIN_DIR="$SCRIPT_DIR/vendor/mpv-0.38.0-1+b1"
 if [ -d "$MPV_PIN_DIR" ]; then
-    apt install -y --allow-downgrades "$MPV_PIN_DIR"/libmpv2_0.38.0-1+b1_arm64.deb "$MPV_PIN_DIR"/mpv_0.38.0-1+b1_arm64.deb
+    # --allow-change-held-packages: needed on a re-run against a device
+    # already pinned by a previous install.sh run (mpv/libmpv2 already
+    # held). Harmless no-op otherwise.
+    apt install -y --allow-downgrades --allow-change-held-packages "$MPV_PIN_DIR"/libmpv2_0.38.0-1+b1_arm64.deb "$MPV_PIN_DIR"/mpv_0.38.0-1+b1_arm64.deb
     apt-mark hold mpv libmpv2
     echo "mpv pinned to $(mpv --version | head -1)"
 else
-    echo "⚠️  $MPV_PIN_DIR not found - staying on the repo's default mpv"
+    echo "⚠️  $MPV_PIN_DIR not found - falling back to Debian's current mpv package"
     echo "   (this will very likely have the tearing bug - see RIPPLE-TEARING-INVESTIGATION.md)"
+    apt install -y mpv
 fi
 
 # =============================================================================
