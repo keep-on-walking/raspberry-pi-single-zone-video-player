@@ -123,7 +123,7 @@ echo "System packages installed"
 echo "Pinning mpv to known-good 0.38.0 (see RIPPLE-TEARING-INVESTIGATION.md)..."
 MPV_PIN_DIR="$SCRIPT_DIR/vendor/mpv-0.38.0-1+b1"
 if [ -d "$MPV_PIN_DIR" ]; then
-    apt install -y "$MPV_PIN_DIR"/libmpv2_0.38.0-1+b1_arm64.deb "$MPV_PIN_DIR"/mpv_0.38.0-1+b1_arm64.deb
+    apt install -y --allow-downgrades "$MPV_PIN_DIR"/libmpv2_0.38.0-1+b1_arm64.deb "$MPV_PIN_DIR"/mpv_0.38.0-1+b1_arm64.deb
     apt-mark hold mpv libmpv2
     echo "mpv pinned to $(mpv --version | head -1)"
 else
