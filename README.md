@@ -67,10 +67,8 @@ including the exact commands used to bring up and verify a real master +
 remote pair. Short version:
 
 ```bash
-git clone -b multisync https://github.com/keep-on-walking/raspberry-pi-single-zone-video-player.git
-cd raspberry-pi-single-zone-video-player
-sudo bash install.sh
-sudo bash chrony-setup.sh --role master   # or: --role remote --master-host <master-hostname>.local
+curl -sSL https://raw.githubusercontent.com/keep-on-walking/raspberry-pi-single-zone-video-player/multisync/install.sh | sudo bash
+sudo bash /opt/rpi-video-player/bin/chrony-setup.sh --role master   # or: --role remote --master-host <master-hostname>.local
 ```
 
 Then set `sync.role` (`master` or `remote`) and restart the service — see

@@ -161,6 +161,15 @@ chown -R $ACTUAL_USER:$ACTUAL_USER $INSTALL_DIR
 
 echo "Application files copied"
 
+# Operator scripts (chrony-setup.sh) aren't part of the running app, so
+# they weren't copied above - but they still need to live somewhere
+# stable. Cloning via the curl one-liner bootstrap leaves the source repo
+# in a temp directory that may not survive a reboot, so without this,
+# chrony-setup.sh would only be reachable from wherever the repo happened
+# to be cloned - not reliable. Give it a permanent, predictable home.
+cp $SCRIPT_DIR/chrony-setup.sh $INSTALL_DIR/bin/chrony-setup.sh
+chmod +x $INSTALL_DIR/bin/chrony-setup.sh
+
 # =============================================================================
 # Install Python Dependencies
 # =============================================================================

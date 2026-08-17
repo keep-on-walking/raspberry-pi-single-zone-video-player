@@ -143,13 +143,17 @@ effect (see [HDMI output selection](#hdmi-output-selection)):
 sudo reboot
 ```
 
-**Chrony setup** — different args per role:
+**Chrony setup** — different args per role. `install.sh` copies this
+script to a stable path (`/opt/rpi-video-player/bin/`) regardless of
+which install method you used, so it's always there even after the
+curl one-liner (which clones to a temp directory that won't stick
+around):
 ```bash
 # Master:
-sudo bash chrony-setup.sh --role master
+sudo bash /opt/rpi-video-player/bin/chrony-setup.sh --role master
 
 # Remote (use the master's hostname/IP from the step above):
-sudo bash chrony-setup.sh --role remote --master-host mpv-master.local
+sudo bash /opt/rpi-video-player/bin/chrony-setup.sh --role remote --master-host mpv-master.local
 ```
 
 Verify clock agreement (this is the project's T1 test — should show well
