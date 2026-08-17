@@ -2,21 +2,42 @@
 
 ## RESOLVED
 
-Root cause: a real mpv regression between `0.38.0` and `0.40.0` (see
-"BREAKTHROUGH" section below). Fix implemented in `install.sh`: mpv is
-now pinned to the known-good `0.38.0-1+b1` build, vendored in
-`vendor/mpv-0.38.0-1+b1/` (not fetched from snapshot.debian.org at
-install time, so this doesn't depend on that archive's availability
-going forward) and held via `apt-mark hold` so a routine `apt upgrade`
-on a deployed device can't silently reintroduce the bug. Confirmed
-clean on a Pi 5 with H.265 content; not yet re-verified on the CM4/Pi 4
-devices used for the earlier H.264 tests, though the bug appearing
-identically across both GPU generations makes it very likely the fix
-holds there too.
+Turned out to be **two independent, compounding bugs**, both of which
+had to be fixed - fixing only one still tears:
 
-Revisit whenever a newer mpv release is available — re-run the test
-below, and if it's clean, remove the pin (delete the `install.sh` block
-and the `vendor/mpv-0.38.0-1+b1/` directory).
+1. **A real mpv regression between `0.38.0` and `0.40.0`** affecting
+   `--vo=gpu`/`gpu-next` specifically (see "BREAKTHROUGH" section
+   below). Fixed in `install.sh`: mpv pinned to the known-good
+   `0.38.0-1+b1` build, vendored in `vendor/mpv-0.38.0-1+b1/` (not
+   fetched from snapshot.debian.org at install time) and held via
+   `apt-mark hold` so a routine `apt upgrade` can't silently
+   reintroduce it.
+2. **`video_player.py` was using `--vo=xv`** (the legacy X11 video
+   extension) the entire time, in every test throughout this
+   investigation *except* the manual one-off comparisons that
+   diagnosed bug #1 — those all explicitly used `--vo=gpu`, which is
+   *not* what production actually runs. `--vo=xv` has no real
+   vsync/tear-free presentation without a compositor (this project
+   runs a bare X server, no window manager) and tears on **every**
+   mpv version tested, `0.38.0` included. This means the mpv version
+   regression (bug #1), while real and worth having found/fixed, was
+   never actually what caused production's tearing - production never
+   used `--vo=gpu` at all until this fix. Fixed in `video_player.py`:
+   changed the hardcoded `--vo=xv` to `--vo=gpu`.
+
+Confirmed clean combination: mpv `0.38.0` + `--vo=gpu`, on a Pi 5,
+using production's exact launch flags. The other three combinations
+(`0.40.0`+`xv`, `0.40.0`+`gpu`, `0.38.0`+`xv`) all tear - both fixes
+are genuinely required together, neither one alone is sufficient.
+
+Not yet re-verified on the CM4/Pi 4 devices used for earlier tests in
+this investigation, though the shared `vc4`/`v3d` driver stack across
+all Pi generations tested makes it very likely both fixes hold there
+too.
+
+Revisit the mpv pin whenever a newer release is available — re-run the
+test below, and if `--vo=gpu` is clean on it, remove the pin (delete
+the `install.sh` block and the `vendor/mpv-0.38.0-1+b1/` directory).
 
 ## Symptom
 

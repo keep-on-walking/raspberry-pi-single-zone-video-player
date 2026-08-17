@@ -100,8 +100,17 @@ class VideoPlayer:
             '--really-quiet',
             '--keep-open=yes',
 
-            # X11 video output (xv for Pi hardware decoding compatibility)
-            '--vo=xv',
+            # X11 video output. Was --vo=xv (legacy X11 video extension) -
+            # real-hardware testing found this tears visibly during
+            # playback, on every Pi generation tested (CM4/Pi4 VideoCore VI,
+            # Pi5 VideoCore VII), even on the mpv version pinned to fix a
+            # separate rendering regression (see RIPPLE-TEARING-
+            # INVESTIGATION.md). xv has no real vsync/tear-free presentation
+            # without a compositor, which this project's bare X11 setup
+            # (no window manager) doesn't have. --vo=gpu confirmed clean on
+            # the same hardware/content, with hardware decode (DRM-PRIME)
+            # working correctly too - strictly better on both counts.
+            '--vo=gpu',
 
             # Window geometry (position and size)
             f'--geometry={self.geometry["width"]}x{self.geometry["height"]}+{self.geometry["x"]}+{self.geometry["y"]}',
